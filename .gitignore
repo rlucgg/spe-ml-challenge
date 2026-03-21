@@ -1,2 +1,9 @@
-.googledrive
+.googledrive/
 .DS_Store
+.env
+data/processed/
+__pycache__/
+*.pyc
+*.egg-info/
+venv/
+.venv/
