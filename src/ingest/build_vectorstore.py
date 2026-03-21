@@ -64,7 +64,7 @@ def build_vectorstore(
     # Delete existing collection to rebuild
     try:
         client.delete_collection(COLLECTION_NAME)
-    except ValueError:
+    except Exception:
         pass
 
     collection = client.get_or_create_collection(
