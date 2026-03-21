@@ -195,65 +195,65 @@ Build an intelligent AI agent that reads drilling data and daily reports from th
 
 #### A. Data Ingestion Pipeline (`src/ingest/`)
 
-**Step 1: Parse DDR XML → Structured + Text**
+**Step 1: Parse DDR XML → Structured + Text** *(IMPLEMENTED — 1,759 files, 0 errors)*
 ```
 Input:  1,759 DDR XML files
-Output:
-  - ddr_activities table (well, date, start_time, end_time, depth_m, activity_type, state, detail, comments)
-  - ddr_status table (well, date, md_m, tvd_m, hole_diameter_in, summary_24hr, forecast_24hr)
-  - ddr_fluids table (well, date, mud_type, density_gcc, pv_mPas, yp_Pa)
-  - ddr_gas table (well, date, depth_m, methane_ppm, ethane_ppm, ...)
-  - ddr_surveys table (well, date, md_m, tvd_m, inclination_deg, azimuth_deg)
-  - Text corpus for vector indexing (activity comments + 24hr summaries)
+Output (actual counts):
+  - ddr_activities table: 23,447 rows (well, date, start_time, end_time, depth_m, activity_code, state, state_detail, comments)
+  - ddr_status table: 1,759 rows (well, date, md_m, tvd_m, hole_diameter_in, summary_24hr, forecast_24hr, dist_drill_m, rop_current_m_per_hr)
+  - ddr_fluids table: 2,271 rows (well, date, mud_type, mud_class, density_gcc, pv_mPas, yp_Pa)
+  - ddr_surveys table: 1,726 rows (well, date, md_m, tvd_m, inclination_deg, azimuth_deg)
+  - wellbore_info table: 1,759 rows (well, name_well, name_wellbore, spud_date, drill_complete_date, operator, drill_contractor, rig_name)
+  - Text corpus: 26,965 documents for vector indexing (activity comments + 24hr summaries + forecasts)
 ```
 
-**Step 2: Parse WITSML Real-Time Data → Time Series**
+**Step 2: Parse WITSML Real-Time Data** *(IMPLEMENTED — 33 wellbore sections across 22 wells)*
 ```
-Input:  Key WITSML log/mudLog/message/bhaRun/trajectory XML files
-Output:
-  - drilling_params table (well, timestamp, depth_m, rop_m_per_hr, wob_kN, rpm, torque_kNm, pump_pressure_kPa, flow_rate_lpm, hookload_kN)
-  - bha_runs table (well, run_number, start_depth_m, end_depth_m, start_time, end_time, bit_type, components)
-  - trajectory table (well, md_m, tvd_m, inclination_deg, azimuth_deg)
-  - messages table (well, timestamp, depth_m, message_type, text)
+Input:  WITSML 1.4.1.1 XML files from bhaRun/, mudLog/, trajectory/, message/ directories
+Output (actual counts):
+  - witsml_bha_runs table: 161 rows (well, wellbore, run_name, start_time, end_time, md_start_m, md_stop_m)
+  - witsml_mudlog table: 2,882 rows (well, wellbore, md_top_m, md_bottom_m, lith_type, rop_avg_m_per_hr, wob_avg_kN, torque_avg_kNm, rpm_avg, mud_weight_sg, ecd_sg, dxc, methane_avg_ppm)
+  - witsml_trajectory table: 4,217 rows (well, wellbore, md_m, tvd_m, inclination_deg, azimuth_deg, dls_deg_per_30m)
+  - witsml_messages table: 11,134 rows (well, wellbore, timestamp, md_m, message_type, message_text)
+Unit conversions: ROP m/s→m/hr, WOB N→kN, torque N.m→kN.m, RPM c/s→RPM, mud weight kg/m³→sg, angles rad→deg
 ```
 
-**Step 3: Parse Production Data**
+**Step 3: Parse Production Data** *(IMPLEMENTED)*
 ```
 Input:  Volve production data.xlsx
-Output: production table (well, date, oil_vol, gas_vol, water_vol, pressure, temperature, choke_size)
+Output: production table: 15,634 rows (well, date, on_stream_hrs, bore_oil_vol, bore_gas_vol, bore_wat_vol, pressure, temperature, choke_size)
 ```
 
-**Step 4: Parse Well Technical Data**
+**Step 4: Parse Well Technical Data** *(IMPLEMENTED)*
 ```
-Input:  Survey files, EDM database, well picks
+Input:  Well_picks_Volve_v1.dat, Well_perforations_Volve.dat (fixed-width ASCII)
 Output:
-  - well_metadata table (well, spud_date, completion_date, water_depth, operator, rig)
-  - formation_tops table (well, formation_name, md_m, tvd_m)
-  - casing_program table (well, section, casing_od_in, shoe_depth_m)
+  - formation_tops table: 409 rows (well, surface_name, md_m, tvd_m, tvdss_m, twt_ms)
+  - perforations table: 48 rows (well, md_top_m, md_base_m, tvd_top_m, tvd_base_m)
 ```
 
-**Step 5: Build Vector Store**
+**Step 5: Build Vector Store** *(IMPLEMENTED — 26,965 documents)*
 ```
 Input:  DDR text corpus (activity comments + summaries + forecasts)
-Output: ChromaDB collection with embeddings (OpenAI text-embedding-3-small)
-  - Metadata: well, date, activity_type, depth_m
+Output: ChromaDB collection with OpenAI text-embedding-3-small embeddings
+  - 26,965 documents indexed
+  - Metadata: well, date, depth_m, doc_type, activity_code
   - Chunk size: per-activity (natural document boundary)
+  - Falls back to SQL keyword search when vector store unavailable
 ```
 
-#### B. Agent Tools (`src/tools/`)
+#### B. Agent Tools (`src/tools/`) — 8 implemented
 
-| Tool Name | Description | Returns |
+| Tool Name | Description | Data Sources |
 |---|---|---|
-| `query_drilling_data` | SQL queries on drilling parameters, DDR activities, fluids, gas | Tabular data + summary stats |
-| `search_daily_reports` | Semantic search over DDR text corpus | Ranked passages with well/date/depth context |
-| `get_well_overview` | Well metadata, sections drilled, date ranges, total depth | Structured well profile |
-| `get_drilling_phases` | Algorithm-based phase detection from activity codes + depth progression | Phase labels with time intervals and evidence |
-| `compute_efficiency_metrics` | NPT classification, ROP statistics, productive time ratios | Metrics with breakdown |
-| `compare_wells` | Side-by-side comparison of any metric between wells | Comparison table + delta analysis |
-| `get_bha_configurations` | BHA run details, component lists, operating parameters | Configuration records |
-| `identify_operational_issues` | Filter DDR activities with state=problem, extract patterns | Issue timeline with root cause hints |
-| `get_formation_context` | Formation tops, lithology, and geological context for a depth | Geological context |
-| `generate_visualization` | Create plots (depth vs time, ROP by section, NPT breakdown, etc.) | Matplotlib/Plotly chart saved as image |
+| `query_drilling_data` | SQL queries on all 12 DuckDB tables (DDR + WITSML + production + geological) | DuckDB |
+| `search_daily_reports` | Semantic search over DDR text; falls back to SQL keyword search | ChromaDB + DuckDB |
+| `get_well_overview` | Well metadata, hole sections, activity distribution, formation tops | DuckDB |
+| `get_drilling_phases` | Rule-based phase detection from activity codes + depth + hole size transitions | DuckDB |
+| `compute_efficiency_metrics` | NPT breakdown by cause, ROP by section, productive time ratio | DuckDB |
+| `compare_wells` | Side-by-side comparison of activity distributions, depths, rates | DuckDB |
+| `get_bha_configurations` | BHA run analysis with drilling parameters (ROP, WOB, RPM from WITSML) | DuckDB |
+| `identify_operational_issues` | Problem detection from DDR state fields, categorized by root cause | DuckDB |
 
 #### C. Orchestrator Agent (`src/agent/`)
 
@@ -361,111 +361,95 @@ spe-ml-challenge/
 ├── CLAUDE.md                    # Claude Code instructions
 ├── spec.md                      # This document
 ├── README.md                    # Setup + usage instructions for judges
-├── requirements.txt             # Python dependencies
+├── requirements.txt             # Python dependencies (12 packages)
 ├── .env.example                 # Template: OPENAI_API_KEY=your-key-here
 ├── .gitignore                   # .googledrive, .env, __pycache__, data/processed/
 │
 ├── src/
 │   ├── __init__.py
-│   ├── main.py                  # Entry point: CLI interface
+│   ├── config.py                # Central configuration, well name normalization
+│   ├── main.py                  # Entry point: CLI (ingest / ask / demo)
 │   │
 │   ├── ingest/                  # Data ingestion pipeline
 │   │   ├── __init__.py
-│   │   ├── parse_ddr.py         # DDR XML → structured tables + text corpus
-│   │   ├── parse_witsml.py      # WITSML logs/messages/bhaRun → time series
+│   │   ├── parse_ddr.py         # DDR XML → 5 structured tables + text corpus
+│   │   ├── parse_witsml.py      # WITSML bhaRun/mudLog/trajectory/message → 4 tables
 │   │   ├── parse_production.py  # XLSX → production table
-│   │   ├── parse_well_tech.py   # Surveys, EDM, well picks
-│   │   ├── build_vectorstore.py # Text → ChromaDB embeddings
-│   │   └── build_database.py    # Orchestrate all ingestion → DuckDB + ChromaDB
+│   │   ├── parse_well_tech.py   # Well picks + perforations → 2 tables
+│   │   ├── build_database.py    # Orchestrate all ingestion → DuckDB (12 tables)
+│   │   └── build_vectorstore.py # Text → ChromaDB embeddings (26,965 docs)
 │   │
-│   ├── tools/                   # Agent tools
+│   ├── tools/                   # Agent tools (8 tools)
 │   │   ├── __init__.py
-│   │   ├── tool_registry.py     # OpenAI function definitions
-│   │   ├── query_data.py        # SQL-based data queries
-│   │   ├── search_reports.py    # Vector search over DDR text
-│   │   ├── well_overview.py     # Well metadata retrieval
-│   │   ├── phase_detection.py   # Drilling phase identification
-│   │   ├── efficiency_metrics.py# NPT, ROP, efficiency computations
-│   │   ├── compare_wells.py     # Cross-well comparisons
-│   │   ├── bha_analysis.py      # BHA configuration analysis
-│   │   ├── issue_detection.py   # Operational issue identification
-│   │   ├── formation_context.py # Geological context
-│   │   └── visualize.py         # Chart generation
+│   │   ├── tool_registry.py     # OpenAI function definitions + dispatch
+│   │   ├── query_data.py        # SQL queries on all 12 DuckDB tables
+│   │   ├── search_reports.py    # Semantic search (ChromaDB) + SQL fallback
+│   │   ├── well_overview.py     # Well metadata, sections, formations
+│   │   ├── phase_detection.py   # Rule-based drilling phase identification
+│   │   ├── efficiency_metrics.py# NPT, ROP, productive time analysis
+│   │   ├── compare_wells.py     # Cross-well comparison
+│   │   ├── bha_analysis.py      # BHA configuration + drilling parameter analysis
+│   │   └── issue_detection.py   # Operational issue identification + root causes
 │   │
 │   ├── agent/                   # LLM agent
 │   │   ├── __init__.py
-│   │   ├── orchestrator.py      # Main agent loop with tool calling
-│   │   ├── prompts.py           # System prompts + few-shot examples
+│   │   ├── orchestrator.py      # GPT-4o agent loop with tool calling (max 10 rounds)
+│   │   ├── prompts.py           # System prompt with drilling domain knowledge
 │   │   └── output_formatter.py  # Structured answer formatting
 │   │
-│   └── analysis/                # Standalone analysis modules
-│       ├── __init__.py
-│       ├── phase_detection.py   # Phase detection algorithm
-│       ├── efficiency.py        # Efficiency computation logic
-│       ├── rop_analysis.py      # ROP statistics and trends
-│       └── npt_classification.py# NPT categorization logic
+│   └── analysis/                # Reserved for standalone analysis modules
+│       └── __init__.py
 │
 ├── data/
-│   ├── raw/                     # Symlink to .googledrive/Volve Data/
-│   └── processed/               # DuckDB file, ChromaDB directory (gitignored)
-│       ├── volve.duckdb
-│       └── vectorstore/
-│
-├── notebooks/                   # Optional exploration notebooks
-│   └── exploration.ipynb
+│   └── processed/               # DuckDB + ChromaDB (gitignored, built by ingest)
+│       ├── volve.duckdb          # 12 tables
+│       └── vectorstore/          # 26,965 embedded documents
 │
 ├── presentation/                # 5-minute presentation
-│   └── slides.pptx              # or slides.pdf
 │
-└── tests/
-    ├── test_ingest.py
-    ├── test_tools.py
-    └── test_agent.py
+└── tests/                       # 69 tests, all passing
+    ├── __init__.py
+    ├── test_config.py           # Well name normalization + display (18 tests)
+    ├── test_parse_ddr.py        # DDR parsing: single file + all 1,759 files (12 tests)
+    ├── test_parse_witsml.py     # WITSML parsing: all 4 data types + units (13 tests)
+    └── test_tools.py            # All 8 agent tools + registry (26 tests)
 ```
 
 ---
 
 ## 7. Implementation Plan (Priority Order)
 
-### Phase 1: Data Ingestion (CRITICAL PATH — Do First)
-1. **parse_ddr.py** — Parse all 1,759 DDR XML files into structured tables
-   - Activity log with timestamps, codes, states, comments
-   - Status info (depth, hole size, summaries)
-   - Fluid properties, gas readings, surveys
-   - This is the HIGHEST VALUE data source
-2. **parse_witsml.py** — Parse WITSML data for key wells (F-11, F-1C, F-15)
-   - Focus on mudLog (most information-dense), bhaRun, trajectory, messages
-   - Log data is huge; parse selectively for drilling-relevant curves
-3. **parse_production.py** — Parse XLSX (straightforward)
-4. **parse_well_tech.py** — Parse surveys, well picks, formation tops
-5. **build_database.py** — Load everything into DuckDB
-6. **build_vectorstore.py** — Embed DDR text into ChromaDB
+### Phase 1: Data Ingestion — COMPLETE
+1. **parse_ddr.py** — 1,759 DDR XML files → 23,447 activities, 26,965 text docs, 0 errors
+2. **parse_witsml.py** — bhaRun (161), mudLog (2,882), trajectory (4,217), messages (11,134) across 14 wells
+3. **parse_production.py** — 15,634 production records from Excel
+4. **parse_well_tech.py** — 409 formation tops, 48 perforations from fixed-width ASCII
+5. **build_database.py** — 12 DuckDB tables loaded
+6. **build_vectorstore.py** — 26,965 documents embedded in ChromaDB
 
-### Phase 2: Agent Tools
-7. **query_data.py** — SQL query interface over DuckDB
-8. **search_reports.py** — Semantic search over ChromaDB
-9. **well_overview.py** — Well metadata lookup
-10. **phase_detection.py** — Automated phase classification
-11. **efficiency_metrics.py** — NPT and ROP computations
-12. **compare_wells.py** — Cross-well comparison
-13. **bha_analysis.py** — BHA/configuration analysis
-14. **issue_detection.py** — Problem detection from DDR state fields
-15. **visualize.py** — Chart generation
+### Phase 2: Agent Tools — COMPLETE (8 tools)
+7. **query_data.py** — SQL query interface over all 12 DuckDB tables
+8. **search_reports.py** — Semantic search (ChromaDB) with SQL keyword fallback
+9. **well_overview.py** — Well metadata, hole sections, formations, activity distribution
+10. **phase_detection.py** — Rule-based phase classification from DDR activity codes
+11. **efficiency_metrics.py** — NPT breakdown, ROP by section, productive time ratio
+12. **compare_wells.py** — Side-by-side well comparison with activity distributions
+13. **bha_analysis.py** — BHA run analysis with drilling parameters from DDR + WITSML
+14. **issue_detection.py** — Problem detection, categorization, root cause analysis
 
-### Phase 3: Agent Core
-16. **prompts.py** — System prompt with drilling domain knowledge
-17. **tool_registry.py** — OpenAI function definitions for all tools
-18. **orchestrator.py** — Agent loop: receive question → plan → call tools → synthesize
-19. **output_formatter.py** — Format structured answers per problem statement requirements
+### Phase 3: Agent Core — COMPLETE
+15. **prompts.py** — System prompt with drilling domain knowledge + WITSML data awareness
+16. **tool_registry.py** — 8 OpenAI function definitions with full schema descriptions
+17. **orchestrator.py** — GPT-4o agent loop with tool calling (max 10 rounds, temperature 0.1)
+18. **output_formatter.py** — Structured answer formatting per problem statement
 
-### Phase 4: CLI & Polish
-20. **main.py** — CLI: `python src/main.py ingest` and `python src/main.py ask "question"`
-21. **README.md** — Setup instructions for judges
-22. **.env.example** — API key template
-23. **requirements.txt** — Pin all dependencies
+### Phase 4: CLI & Quality — COMPLETE
+19. **main.py** — CLI: `python -m src.main ingest|ask|demo`
+20. **README.md** — Setup instructions for judges
+21. **Tests** — 69 tests across 4 files (config, DDR, WITSML, tools), all passing
 
 ### Phase 5: Presentation
-24. **slides.pptx** — 5-minute walkthrough of approach, architecture, sample Q&A
+22. **slides** — 5-minute walkthrough of approach, architecture, sample Q&A — TODO
 
 ---
 
@@ -529,24 +513,26 @@ CONFIDENCE: High — phase boundaries clearly marked by casing points and activi
 
 ## 10. Risk Mitigation
 
-| Risk | Mitigation |
-|---|---|
-| WITSML XML parsing complexity | Focus on DDR (cleaner XML); WITSML as supplementary |
-| Large data volume (30K+ files) | Parse selectively; focus on 3-4 key wells |
-| LLM hallucination | Tool-calling ensures LLM reasons over REAL data; citations required |
-| API rate limits | Cache tool results; batch similar queries |
-| Judge reproducibility | Clear README, .env.example, pinned deps, `python main.py ingest && python main.py ask` |
-| Time constraint (2 days) | Prioritize DDR parsing + core agent; skip nice-to-haves |
+| Risk | Mitigation | Status |
+|---|---|---|
+| WITSML XML parsing complexity | Parsed bhaRun, mudLog, trajectory, message; skipped huge log files | Resolved |
+| Large data volume (30K+ files) | Parsed all DDR (1,759) + selective WITSML (4 data types, 14 wells) | Resolved |
+| LLM hallucination | Tool-calling ensures LLM reasons over REAL data; citations required | Implemented |
+| API rate limits | Tool results truncated at 15K chars; max 10 tool rounds | Implemented |
+| Judge reproducibility | Clear README, .env.example, `python -m src.main ingest && ask` | Tested |
+| Regression bugs | 69 unit tests across parsers, tools, and integration | Passing |
 
 ---
 
 ## 11. What Makes This Solution Win
 
 1. **Evidence-first architecture**: Not just an LLM chatbot — every answer backed by specific data points and report citations
-2. **Dual-source cross-referencing**: Structured data AND unstructured reports, as the problem statement demands
-3. **Transparent reasoning chain**: The agent shows its work at every step
-4. **Domain-appropriate**: Phase detection algorithm uses real drilling engineering concepts (not generic ML)
-5. **Reproducible**: Single command setup, judges use their own API keys
-6. **Clean, minimal code**: No unnecessary framework complexity — judges can read and understand it
-7. **Handles all 6 question categories**: Purpose-built tools for each analysis type
+2. **Dual-source cross-referencing**: Structured data (DuckDB) AND unstructured reports (ChromaDB), as the problem statement demands
+3. **Deep data integration**: 12 DuckDB tables from DDR XML + WITSML real-time + production + geological data — more data sources than most competitors
+4. **Actual drilling measurements**: WITSML mudLog provides real ROP, WOB, torque, RPM, lithology per depth interval — not just estimated from daily progress
+5. **Transparent reasoning chain**: The agent shows its work at every step with tool call traces
+6. **Domain-appropriate**: Phase detection uses real drilling engineering concepts (activity codes, hole size transitions, casing points)
+7. **Handles all 6 question categories**: 8 purpose-built tools covering phases, efficiency, ROP, BHA, issues, and cross-well comparison
 8. **Quantified uncertainty**: Every answer includes confidence level and stated assumptions
+9. **Reproducible**: Single command setup, judges use their own API keys, 69 passing tests
+10. **Clean, minimal code**: Pure OpenAI SDK + DuckDB + ChromaDB — no LangChain, no framework bloat

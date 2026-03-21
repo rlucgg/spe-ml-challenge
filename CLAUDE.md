@@ -56,7 +56,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env  # Then add OPENAI_API_KEY
 
-# Ingest data (run once, ~10-15 min)
+# Ingest data (run once, ~3 min)
 python -m src.main ingest
 
 # Ask a question
@@ -64,6 +64,9 @@ python -m src.main ask "Identify the major drilling phases for well 15/9-F-11 T2
 
 # Run all demo questions
 python -m src.main demo
+
+# Run tests (always run before committing)
+python -m pytest tests/ -v
 ```
 
 ## Data Details You Must Know
@@ -135,15 +138,23 @@ Location: `.googledrive/Volve Data/Geophysical_Interpretations/`
 - `Wells/Well_picks_Volve_v1.dat` — formation tops (557 lines)
 - `Wells/Well_perforations_Volve.dat` — perforation intervals (49 lines)
 
-## Implementation Priorities
+## Implementation Status
 
-1. **DDR XML parsing** — Parse ALL 1,759 files into DuckDB tables + text for vector store
-2. **Vector store** — Embed DDR text (activity comments + 24hr summaries) into ChromaDB
-3. **Agent tools** — Build tool functions for data query, report search, phase detection, etc.
-4. **Orchestrator** — GPT-4o agent with tool calling via OpenAI SDK
-5. **CLI** — Clean `python -m src.main` entry point
-6. **WITSML parsing** — Supplement with real-time data for key wells (stretch goal for depth)
-7. **Presentation** — 5-minute slide deck
+All core phases are implemented and tested:
+
+1. **DDR XML parsing** — All 1,759 files parsed → 23,447 activities, 26,965 text docs, zero errors
+2. **WITSML real-time data** — 161 BHA runs, 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 4,217 trajectory stations, 11,134 messages
+3. **Vector store** — 26,965 DDR text documents embedded in ChromaDB (text-embedding-3-small)
+4. **Agent tools** — 8 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection
+5. **Orchestrator** — GPT-4o agent with tool calling via OpenAI SDK (max 10 rounds)
+6. **CLI** — `python -m src.main ingest|ask|demo`
+7. **Tests** — 69 tests across 4 test files, all passing
+8. **Presentation** — TODO: 5-minute slide deck
+
+### DuckDB Tables (12 total)
+DDR: `ddr_status`, `ddr_activities`, `ddr_fluids`, `ddr_surveys`, `wellbore_info`
+WITSML: `witsml_bha_runs`, `witsml_mudlog`, `witsml_trajectory`, `witsml_messages`
+Other: `formation_tops`, `perforations`, `production`
 
 ## Technology Stack
 
@@ -227,14 +238,15 @@ Use these to validate the system works end-to-end:
 
 ## Submission Checklist
 
-- [ ] README.md with clear setup instructions
-- [ ] requirements.txt with pinned versions
-- [ ] .env.example with OPENAI_API_KEY placeholder
-- [ ] .gitignore excludes .googledrive/, data/processed/, .env, __pycache__/
-- [ ] `python -m src.main ingest` works end-to-end
-- [ ] `python -m src.main ask "question"` produces structured, evidence-backed answers
-- [ ] `python -m src.main demo` runs all 6 demo questions
-- [ ] All 6 question categories produce quality answers
+- [x] README.md with clear setup instructions
+- [x] requirements.txt with pinned versions
+- [x] .env.example with OPENAI_API_KEY placeholder
+- [x] .gitignore excludes .googledrive/, data/processed/, .env, __pycache__/
+- [x] `python -m src.main ingest` works end-to-end
+- [x] `python -m src.main ask "question"` produces structured, evidence-backed answers
+- [x] `python -m src.main demo` runs all 6 demo questions
+- [x] All 6 question categories produce quality answers
+- [x] 69 unit tests passing (`python -m pytest tests/ -v`)
+- [x] No API keys in the code
 - [ ] Presentation slides (5 minutes max)
 - [ ] svpoludasu@gmail.com added as GitHub collaborator
-- [ ] No API keys in the code

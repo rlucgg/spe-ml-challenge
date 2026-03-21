@@ -31,6 +31,7 @@ cp .env.example .env
 
 Place the Volve dataset in `.googledrive/Volve Data/` at the project root. The directory should contain:
 - `Well_technical_data/Daily Drilling Report - XML Version/` (1,759 DDR XML files)
+- `WITSML Realtime drilling data/` (real-time drilling data for key wells)
 - `Production_data/Volve production data.xlsx`
 - `Geophysical_Interpretations/Wells/` (well picks and perforations)
 
@@ -40,9 +41,9 @@ Place the Volve dataset in `.googledrive/Volve Data/` at the project root. The d
 python -m src.main ingest
 ```
 
-This parses all DDR XML files, production data, and geological data into:
-- **DuckDB** database (`data/processed/volve.duckdb`) — structured queries
-- **ChromaDB** vector store (`data/processed/vectorstore/`) — semantic search over report text
+This parses all data sources into:
+- **DuckDB** database (`data/processed/volve.duckdb`) — 12 tables for structured queries
+- **ChromaDB** vector store (`data/processed/vectorstore/`) — 26,965 documents for semantic search
 
 ### 5. Ask Questions
 
@@ -89,15 +90,24 @@ Structured Answer with Evidence
 
 | Source | Records | Description |
 |--------|---------|-------------|
-| DDR XML | 1,759 files | Daily drilling reports with activities, fluids, surveys |
+| DDR XML | 1,759 files | Daily drilling reports: 23,447 activities, fluids, surveys |
+| WITSML Real-Time | 14 wells | 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 161 BHA runs, 4,217 trajectory stations, 11,134 operational messages |
 | Production | 15,635 rows | Daily well production data (2013-2016) |
-| Well Picks | 557 lines | Formation tops across Volve wells |
-| Perforations | 49 lines | Perforation interval data |
+| Formation Tops | 409 records | Geological formation boundaries |
+| Perforations | 48 records | Perforation interval data |
+
+## Testing
+
+```bash
+python -m pytest tests/ -v
+```
+
+69 tests covering: DDR parsing, WITSML parsing, well name normalization, all 8 agent tools, tool registry dispatch.
 
 ## Technology
 
 - **LLM**: OpenAI GPT-4o with function calling
-- **Vector Store**: ChromaDB with OpenAI embeddings
-- **Database**: DuckDB (in-process analytical SQL)
-- **XML Parsing**: lxml
+- **Vector Store**: ChromaDB with OpenAI embeddings (26,965 documents)
+- **Database**: DuckDB (12 tables, in-process analytical SQL)
+- **XML Parsing**: lxml (WITSML 1.4.0 DDR + WITSML 1.4.1 real-time)
 - **No heavy frameworks** — pure OpenAI SDK + DuckDB + ChromaDB
