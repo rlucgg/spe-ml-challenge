@@ -33,6 +33,16 @@ def query_drilling_data(sql_query: str, limit: int = 200) -> str:
     - production: well, date, on_stream_hrs, avg_downhole_pressure,
       avg_downhole_temperature, bore_oil_vol, bore_gas_vol, bore_wat_vol,
       flow_kind, avg_choke_size, avg_whp_p, avg_wht_p
+    - witsml_bha_runs: well, wellbore, run_name, start_time, end_time,
+      num_bit_run, num_string_run, md_start_m, md_stop_m
+    - witsml_mudlog: well, wellbore, md_top_m, md_bottom_m, lith_type,
+      lith_pct, rop_avg_m_per_hr, rop_min_m_per_hr, rop_max_m_per_hr,
+      wob_avg_kN, torque_avg_kNm, rpm_avg, mud_weight_sg, ecd_sg, dxc,
+      methane_avg_ppm, ethane_avg_ppm
+    - witsml_trajectory: well, wellbore, timestamp, md_m, tvd_m,
+      inclination_deg, azimuth_deg, dls_deg_per_30m, ns_m, ew_m
+    - witsml_messages: well, wellbore, timestamp, md_m, message_type,
+      message_text
 
     Well names use underscore format: e.g. '15_9_F_11_T2', '15_9_F_1_C'
 

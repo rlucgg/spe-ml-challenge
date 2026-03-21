@@ -55,7 +55,7 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     perforations = parse_perforations()
 
     # Step 3: Parse production data
-    logger.info("Step 3/4: Parsing production data...")
+    logger.info("Step 3/6: Parsing production data...")
     from src.ingest.parse_production import parse_production_data
     import pandas as pd
     try:
@@ -64,14 +64,32 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
         logger.warning("Could not parse production data: %s", e)
         prod_df = pd.DataFrame()
 
-    # Step 4: Build DuckDB database
-    logger.info("Step 4/4: Building DuckDB database...")
+    # Step 4: Parse WITSML real-time data
+    logger.info("Step 4/6: Parsing WITSML real-time data...")
+    from src.ingest.parse_witsml import parse_all_witsml
+    try:
+        parsed_witsml = parse_all_witsml()
+        logger.info(
+            "  Parsed: %d bha_runs, %d mudlog_intervals, %d trajectories, %d messages",
+            len(parsed_witsml["bha_runs"]),
+            len(parsed_witsml["mudlog_intervals"]),
+            len(parsed_witsml["trajectories"]),
+            len(parsed_witsml["messages"]),
+        )
+    except Exception as e:
+        logger.warning("Could not parse WITSML data: %s", e)
+        parsed_witsml = None
+
+    # Step 5: Build DuckDB database
+    logger.info("Step 5/6: Building DuckDB database...")
     from src.ingest.build_database import build_database
-    db_path = build_database(parsed_ddrs, formation_tops, perforations, prod_df)
+    db_path = build_database(
+        parsed_ddrs, formation_tops, perforations, prod_df, parsed_witsml
+    )
     logger.info("Database built at %s", db_path)
 
-    # Step 5: Build ChromaDB vector store
-    logger.info("Step 5/5: Building ChromaDB vector store...")
+    # Step 6: Build ChromaDB vector store
+    logger.info("Step 6/6: Building ChromaDB vector store...")
     import os
     if os.getenv("OPENAI_API_KEY"):
         from src.ingest.build_vectorstore import build_vectorstore

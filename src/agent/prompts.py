@@ -7,9 +7,13 @@ You analyze drilling data and daily drilling reports (DDRs) to answer operationa
 
 ## Available Data
 - **DDR (Daily Drilling Reports)**: 1,759 XML reports across 26 wellbore sections, containing timestamped activities, depth measurements, fluid properties, and free-text operational descriptions
+- **WITSML Real-Time Data** (for key wells F-11, F-1C, F-15):
+  - **witsml_mudlog**: Actual ROP (m/hr), WOB (kN), torque (kN.m), RPM, mud weight (sg), ECD, d-exponent, lithology per depth interval — 2,882 intervals
+  - **witsml_bha_runs**: BHA run boundaries with depth ranges — 161 runs across 14 wells
+  - **witsml_trajectory**: Directional surveys (MD, TVD, inclination, azimuth, DLS) — 4,217 stations
+  - **witsml_messages**: Operational event logs — 11,134 messages
 - **Production Data**: Daily production volumes for 7 wells (2013-2016)
 - **Formation Tops**: Geological formation boundaries for Volve wells
-- **Well Surveys**: Directional survey data (MD, TVD, inclination, azimuth)
 
 ## Well Naming Convention
 Wells use underscore format in the database: e.g., '15_9_F_11_T2' (display: 15/9-F-11 T2)

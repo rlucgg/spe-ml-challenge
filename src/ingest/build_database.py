@@ -131,6 +131,69 @@ def create_tables(con: duckdb.DuckDBPyConnection) -> None:
             avg_wht_p DOUBLE
         )
     """)
+    # WITSML real-time data tables
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS witsml_bha_runs (
+            well VARCHAR,
+            wellbore VARCHAR,
+            run_name VARCHAR,
+            start_time VARCHAR,
+            end_time VARCHAR,
+            num_bit_run VARCHAR,
+            num_string_run VARCHAR,
+            md_start_m DOUBLE,
+            md_stop_m DOUBLE
+        )
+    """)
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS witsml_mudlog (
+            well VARCHAR,
+            wellbore VARCHAR,
+            md_top_m DOUBLE,
+            md_bottom_m DOUBLE,
+            lith_type VARCHAR,
+            lith_pct DOUBLE,
+            rop_avg_m_per_hr DOUBLE,
+            rop_min_m_per_hr DOUBLE,
+            rop_max_m_per_hr DOUBLE,
+            wob_avg_kN DOUBLE,
+            torque_avg_kNm DOUBLE,
+            rpm_avg DOUBLE,
+            mud_weight_sg DOUBLE,
+            ecd_sg DOUBLE,
+            dxc DOUBLE,
+            methane_avg_ppm DOUBLE,
+            ethane_avg_ppm DOUBLE
+        )
+    """)
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS witsml_trajectory (
+            well VARCHAR,
+            wellbore VARCHAR,
+            timestamp VARCHAR,
+            md_m DOUBLE,
+            tvd_m DOUBLE,
+            inclination_deg DOUBLE,
+            azimuth_deg DOUBLE,
+            dls_deg_per_30m DOUBLE,
+            ns_m DOUBLE,
+            ew_m DOUBLE
+        )
+    """)
+
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS witsml_messages (
+            well VARCHAR,
+            wellbore VARCHAR,
+            timestamp VARCHAR,
+            md_m DOUBLE,
+            message_type VARCHAR,
+            message_text VARCHAR
+        )
+    """)
+
     logger.info("All database tables created")
 
 
@@ -224,11 +287,35 @@ def load_production_data(
     logger.info("Loaded %d production records", len(df))
 
 
+def load_witsml_data(con: duckdb.DuckDBPyConnection, parsed_witsml: dict) -> None:
+    """Load parsed WITSML data into DuckDB tables."""
+    if parsed_witsml.get("bha_runs"):
+        df = pd.DataFrame(parsed_witsml["bha_runs"])
+        con.execute("INSERT INTO witsml_bha_runs SELECT * FROM df")
+        logger.info("Loaded %d WITSML BHA run records", len(df))
+
+    if parsed_witsml.get("mudlog_intervals"):
+        df = pd.DataFrame(parsed_witsml["mudlog_intervals"])
+        con.execute("INSERT INTO witsml_mudlog SELECT * FROM df")
+        logger.info("Loaded %d WITSML mudlog interval records", len(df))
+
+    if parsed_witsml.get("trajectories"):
+        df = pd.DataFrame(parsed_witsml["trajectories"])
+        con.execute("INSERT INTO witsml_trajectory SELECT * FROM df")
+        logger.info("Loaded %d WITSML trajectory station records", len(df))
+
+    if parsed_witsml.get("messages"):
+        df = pd.DataFrame(parsed_witsml["messages"])
+        con.execute("INSERT INTO witsml_messages SELECT * FROM df")
+        logger.info("Loaded %d WITSML message records", len(df))
+
+
 def build_database(
     parsed_ddrs: dict,
     formation_tops: list[dict],
     perforations: list[dict],
     prod_df: pd.DataFrame,
+    parsed_witsml: Optional[dict] = None,
     db_path: Optional[Path] = None,
 ) -> Path:
     """Build the complete DuckDB database from all parsed data.
@@ -248,9 +335,14 @@ def build_database(
     load_well_tech_data(con, formation_tops, perforations)
     load_production_data(con, prod_df)
 
+    if parsed_witsml:
+        load_witsml_data(con, parsed_witsml)
+
     # Log summary stats
     for table in ["ddr_status", "ddr_activities", "ddr_fluids", "ddr_surveys",
-                   "wellbore_info", "formation_tops", "perforations", "production"]:
+                   "wellbore_info", "formation_tops", "perforations", "production",
+                   "witsml_bha_runs", "witsml_mudlog", "witsml_trajectory",
+                   "witsml_messages"]:
         count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         logger.info("Table %s: %d rows", table, count)
 

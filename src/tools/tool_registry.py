@@ -22,16 +22,22 @@ TOOL_DEFINITIONS = [
             "name": "query_drilling_data",
             "description": (
                 "Execute a SQL query against the Volve drilling database. "
-                "Tables: ddr_status (well, date, report_no, md_m, tvd_m, hole_diameter_in, "
+                "DDR tables: ddr_status (well, date, report_no, md_m, tvd_m, hole_diameter_in, "
                 "dist_drill_m, summary_24hr, forecast_24hr, rop_current_m_per_hr), "
                 "ddr_activities (well, date, start_time, end_time, depth_m, activity_code, "
                 "state, state_detail, comments), "
                 "ddr_fluids (well, date, mud_type, mud_class, density_gcc, pv_mPas, yp_Pa), "
                 "ddr_surveys (well, date, md_m, tvd_m, inclination_deg, azimuth_deg), "
-                "wellbore_info (well, date, name_well, name_wellbore, spud_date, drill_complete_date), "
-                "formation_tops (well, surface_name, md_m, tvd_m), "
-                "perforations (well, md_top_m, md_base_m), "
-                "production (well, date, bore_oil_vol, bore_gas_vol, bore_wat_vol). "
+                "wellbore_info (well, date, name_well, name_wellbore, spud_date, drill_complete_date). "
+                "WITSML tables: witsml_bha_runs (well, wellbore, run_name, start_time, end_time, "
+                "num_bit_run, num_string_run, md_start_m, md_stop_m), "
+                "witsml_mudlog (well, wellbore, md_top_m, md_bottom_m, lith_type, lith_pct, "
+                "rop_avg_m_per_hr, rop_min_m_per_hr, rop_max_m_per_hr, wob_avg_kN, torque_avg_kNm, "
+                "rpm_avg, mud_weight_sg, ecd_sg, dxc, methane_avg_ppm, ethane_avg_ppm), "
+                "witsml_trajectory (well, wellbore, md_m, tvd_m, inclination_deg, azimuth_deg, "
+                "dls_deg_per_30m, ns_m, ew_m), "
+                "witsml_messages (well, wellbore, timestamp, md_m, message_type, message_text). "
+                "Other: formation_tops, perforations, production. "
                 "Well names use underscores: '15_9_F_11_T2', '15_9_F_1_C'."
             ),
             "parameters": {
