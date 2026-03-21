@@ -63,28 +63,29 @@ Runs all 6 demonstration questions covering: drilling phases, efficiency, hole s
 
 ```
 User Question
-     │
-     ▼
-GPT-4o Agent (tool calling)
-     │
-     ├─→ query_drilling_data (SQL on DuckDB)
-     ├─→ search_daily_reports (semantic search on ChromaDB)
-     ├─→ get_well_overview (well metadata)
-     ├─→ get_drilling_phases (phase detection algorithm)
-     ├─→ compute_efficiency_metrics (NPT, ROP analysis)
-     ├─→ compare_wells (cross-well comparison)
-     ├─→ get_bha_configurations (BHA/bit analysis)
-     └─→ identify_operational_issues (problem detection)
-     │
-     ▼
+     |
+     v
+GPT-4o Agent (tool calling, max 10 rounds)
+     |
+     |-- query_drilling_data     SQL on 12 DuckDB tables
+     |-- search_daily_reports    Semantic search on 26,965 ChromaDB docs
+     |-- get_well_overview       Well metadata, sections, formations
+     |-- get_drilling_phases     Hole-size + activity-code phase detection
+     |-- compute_efficiency      NPT breakdown, ROP by section
+     |-- compare_wells           Side-by-side well comparison
+     |-- get_bha_configurations  WITSML BHA runs + mudlog drilling params
+     |-- identify_issues         Problem detection + root cause analysis
+     |-- get_formation_context   Geological context for any depth
+     |
+     v
 Structured Answer with Evidence
 ```
 
 **Every answer includes:**
-- Specific data evidence (depths, timestamps, measurements)
-- Direct quotes from daily drilling reports
-- Step-by-step reasoning
-- Stated assumptions and confidence level
+- Specific data evidence (depths, timestamps, measurements from WITSML mudlog)
+- Direct quotes from daily drilling reports with well name and date
+- Step-by-step reasoning chain
+- Explicit assumptions and confidence level (HIGH/MEDIUM/LOW)
 
 ## Data Sources
 
@@ -92,7 +93,7 @@ Structured Answer with Evidence
 |--------|---------|-------------|
 | DDR XML | 1,759 files | Daily drilling reports: 23,447 activities, fluids, surveys |
 | WITSML Real-Time | 14 wells | 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 161 BHA runs, 4,217 trajectory stations, 11,134 operational messages |
-| Production | 15,635 rows | Daily well production data (2013-2016) |
+| Production | 15,634 rows | Daily well production data (2013-2016) |
 | Formation Tops | 409 records | Geological formation boundaries |
 | Perforations | 48 records | Perforation interval data |
 
@@ -102,12 +103,20 @@ Structured Answer with Evidence
 python -m pytest tests/ -v
 ```
 
-69 tests covering: DDR parsing, WITSML parsing, well name normalization, all 8 agent tools, tool registry dispatch.
+86 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 9 agent tools, tool registry dispatch, output format validation.
+
+## Presentation
+
+8-slide presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions. Regenerate with:
+
+```bash
+python presentation/create_slides.py
+```
 
 ## Technology
 
-- **LLM**: OpenAI GPT-4o with function calling
-- **Vector Store**: ChromaDB with OpenAI embeddings (26,965 documents)
+- **LLM**: OpenAI GPT-4o with function calling (max 10 rounds, temperature 0.1)
+- **Vector Store**: ChromaDB with OpenAI text-embedding-3-small (26,965 documents)
 - **Database**: DuckDB (12 tables, in-process analytical SQL)
 - **XML Parsing**: lxml (WITSML 1.4.0 DDR + WITSML 1.4.1 real-time)
 - **No heavy frameworks** — pure OpenAI SDK + DuckDB + ChromaDB

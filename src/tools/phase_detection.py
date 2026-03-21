@@ -1,7 +1,6 @@
-"""Tool: Detect and label drilling phases from DDR activity codes."""
+"""Tool: Detect and label drilling phases from hole sizes, activity codes, and depth."""
 
 import logging
-from datetime import datetime, timedelta
 from typing import Optional
 
 import duckdb
@@ -35,10 +34,22 @@ PHASE_MAP = {
     "interruption -- waiting on weather": "NPT - Weather",
     "interruption -- other": "Other",
     "interruption -- waiting": "NPT - Waiting",
+    "interruption -- wait": "NPT - Waiting",
+    "interruption -- maintain": "NPT - Repair",
     "testing -- test": "Testing",
     "testing -- dst": "Testing",
     "conditioning -- circulate": "Circulating",
     "conditioning -- displace": "Circulating",
+}
+
+# Hole size to section name mapping
+HOLE_SECTION_NAMES = {
+    36.0: "Conductor (36\")",
+    30.0: "Conductor (30\")",
+    26.0: "Surface (26\")",
+    17.5: "Intermediate (17.5\")",
+    12.25: "Production (12.25\")",
+    8.5: "Reservoir (8.5\")",
 }
 
 
@@ -47,11 +58,20 @@ def _classify_activity(code: str) -> str:
     code_lower = code.lower().strip()
     if code_lower in PHASE_MAP:
         return PHASE_MAP[code_lower]
-    # Fuzzy match on prefix
     for key, phase in PHASE_MAP.items():
         if code_lower.startswith(key.split(" -- ")[0]):
             return phase
     return "Other"
+
+
+def _section_name(hole_in: float) -> str:
+    """Get human-readable section name from hole diameter."""
+    if hole_in is None:
+        return "Unknown"
+    closest = min(HOLE_SECTION_NAMES.keys(), key=lambda h: abs(h - hole_in))
+    if abs(closest - hole_in) < 2.0:
+        return HOLE_SECTION_NAMES[closest]
+    return f"{hole_in}\" Section"
 
 
 def _get_con() -> duckdb.DuckDBPyConnection:
@@ -65,9 +85,9 @@ def get_drilling_phases(
 ) -> str:
     """Identify and label major drilling phases for a well.
 
-    Analyzes DDR activity codes, depth progression, and hole size changes
-    to identify drilling phases. Returns chronological phase breakdown
-    with evidence.
+    PRIMARY method: hole-size changes define major phase boundaries.
+    SECONDARY method: activity codes classify sub-phases within each section.
+    Includes depth progression validation and phase confidence assessment.
 
     Args:
         well: Well name (underscore format, e.g. '15_9_F_11_T2')
@@ -75,180 +95,179 @@ def get_drilling_phases(
         date_to: Optional end date filter (YYYY-MM-DD)
 
     Returns:
-        Detailed phase breakdown with dates, depths, and evidence
+        Detailed phase breakdown with dates, depths, evidence, and confidence
     """
     con = _get_con()
-    like_pattern = well.replace("*", "%")
+    like = well.replace("*", "%")
 
-    # Get activities with timestamps
-    query = """
-        SELECT date, start_time, end_time, depth_m, activity_code, state,
-               state_detail, comments
-        FROM ddr_activities
-        WHERE well LIKE ?
-    """
-    params = [like_pattern]
-    if date_from:
-        query += " AND date >= ?"
-        params.append(date_from)
-    if date_to:
-        query += " AND date <= ?"
-        params.append(date_to)
-    query += " ORDER BY date, start_time"
+    def _add_date_filters(q, p, prefix=""):
+        if date_from:
+            q += f" AND {prefix}date >= ?"
+            p.append(date_from)
+        if date_to:
+            q += f" AND {prefix}date <= ?"
+            p.append(date_to)
+        return q, p
 
-    activities = con.execute(query, params).fetchall()
+    # Get status data (hole sizes, depths)
+    sq = "SELECT date, md_m, tvd_m, hole_diameter_in, dist_drill_m, summary_24hr FROM ddr_status WHERE well LIKE ?"
+    sp = [like]
+    sq, sp = _add_date_filters(sq, sp)
+    sq += " ORDER BY date"
+    statuses = con.execute(sq, sp).fetchall()
 
-    # Get depth progression from status
-    status_query = """
-        SELECT date, md_m, tvd_m, hole_diameter_in, summary_24hr
-        FROM ddr_status
-        WHERE well LIKE ?
-    """
-    s_params = [like_pattern]
-    if date_from:
-        status_query += " AND date >= ?"
-        s_params.append(date_from)
-    if date_to:
-        status_query += " AND date <= ?"
-        s_params.append(date_to)
-    status_query += " ORDER BY date"
+    # Get activities
+    aq = "SELECT date, start_time, end_time, depth_m, activity_code, state, state_detail, comments FROM ddr_activities WHERE well LIKE ?"
+    ap = [like]
+    aq, ap = _add_date_filters(aq, ap)
+    aq += " ORDER BY date, start_time"
+    activities = con.execute(aq, ap).fetchall()
 
-    statuses = con.execute(status_query, s_params).fetchall()
     con.close()
 
     if not activities and not statuses:
         return f"No data found for well '{well}'"
 
-    # Classify each activity
-    classified = []
-    for act in activities:
-        phase = _classify_activity(act[4]) if act[4] else "Unknown"
-        classified.append({
-            "date": act[0],
-            "start": act[1],
-            "end": act[2],
-            "depth_m": act[3],
-            "code": act[4],
-            "state": act[5],
-            "detail": act[6],
-            "comments": act[7],
-            "phase": phase,
-        })
-
-    # Detect major phase transitions (group consecutive same-phase activities)
-    phases = []
-    current_phase = None
-    phase_start_date = None
-    phase_start_depth = None
-    phase_activities = []
-
-    for act in classified:
-        if act["phase"] != current_phase:
-            if current_phase and phase_activities:
-                phases.append({
-                    "phase": current_phase,
-                    "start_date": phase_start_date,
-                    "end_date": phase_activities[-1]["date"],
-                    "start_depth": phase_start_depth,
-                    "end_depth": phase_activities[-1].get("depth_m"),
-                    "activity_count": len(phase_activities),
-                    "problems": sum(1 for a in phase_activities if a["state"] == "problem"),
-                    "sample_comments": [
-                        a["comments"] for a in phase_activities[:2] if a["comments"]
-                    ],
-                })
-            current_phase = act["phase"]
-            phase_start_date = act["date"]
-            phase_start_depth = act.get("depth_m")
-            phase_activities = [act]
-        else:
-            phase_activities.append(act)
-
-    # Don't forget the last phase
-    if current_phase and phase_activities:
-        phases.append({
-            "phase": current_phase,
-            "start_date": phase_start_date,
-            "end_date": phase_activities[-1]["date"],
-            "start_depth": phase_start_depth,
-            "end_depth": phase_activities[-1].get("depth_m"),
-            "activity_count": len(phase_activities),
-            "problems": sum(1 for a in phase_activities if a["state"] == "problem"),
-            "sample_comments": [
-                a["comments"] for a in phase_activities[:2] if a["comments"]
-            ],
-        })
-
-    # Merge short phases into major phase blocks by hole section
-    hole_sections = []
-    for s in statuses:
-        if s[3]:  # hole_diameter_in
-            hole_sections.append({
-                "date": s[0], "md_m": s[1], "tvd_m": s[2],
-                "hole_in": s[3], "summary": s[4],
-            })
-
-    # Build output
     lines = [f"=== Drilling Phases for {display_well_name(well)} ===\n"]
+
+    # --- STEP 1: Hole-size-based major phase detection (PRIMARY) ---
+    hole_phases = []
+    current_hole = None
+    phase_start = None
+    phase_start_md = None
+
+    for s in statuses:
+        date, md, tvd, hole, dist, summary = s
+        if hole and hole != current_hole:
+            if current_hole is not None:
+                hole_phases.append({
+                    "hole_in": current_hole,
+                    "section": _section_name(current_hole),
+                    "start_date": phase_start,
+                    "end_date": date,
+                    "start_md": phase_start_md,
+                    "end_md": md,
+                })
+            current_hole = hole
+            phase_start = date
+            phase_start_md = md
+
+    # Close the last phase
+    if current_hole and statuses:
+        last = statuses[-1]
+        hole_phases.append({
+            "hole_in": current_hole,
+            "section": _section_name(current_hole),
+            "start_date": phase_start,
+            "end_date": last[0],
+            "start_md": phase_start_md,
+            "end_md": last[1],
+        })
 
     if statuses:
         lines.append(f"Date Range: {statuses[0][0]} to {statuses[-1][0]}")
         depths = [s[1] for s in statuses if s[1]]
         if depths:
             lines.append(f"Depth Range: {min(depths):.1f}m to {max(depths):.1f}m MD")
+        lines.append("")
 
-    # Hole section summary
-    if hole_sections:
-        seen_holes = {}
-        for hs in hole_sections:
-            h = hs["hole_in"]
-            if h not in seen_holes:
-                seen_holes[h] = {"first_date": hs["date"], "last_date": hs["date"],
-                                 "min_md": hs["md_m"], "max_md": hs["md_m"]}
-            else:
-                seen_holes[h]["last_date"] = hs["date"]
-                if hs["md_m"] and hs["md_m"] > seen_holes[h]["max_md"]:
-                    seen_holes[h]["max_md"] = hs["md_m"]
-
-        lines.append("\nHole Sections Drilled:")
-        for h, info in sorted(seen_holes.items(), key=lambda x: x[1].get("min_md", 0)):
+    # --- Output major hole-section phases ---
+    if hole_phases:
+        lines.append("MAJOR PHASES (by hole section):\n")
+        for i, hp in enumerate(hole_phases, 1):
+            md_range = ""
+            if hp["start_md"] and hp["end_md"]:
+                md_range = f" | MD: {hp['start_md']:.0f}m → {hp['end_md']:.0f}m"
+            days = 0
+            for s in statuses:
+                if hp["start_date"] <= s[0] <= hp["end_date"]:
+                    days += 1
             lines.append(
-                f"  {h}\" hole: {info['first_date']} to {info['last_date']}, "
-                f"{info['min_md']:.0f}m - {info['max_md']:.0f}m MD"
+                f"  Phase {i}: {hp['section']} ({hp['hole_in']}\")"
+            )
+            lines.append(
+                f"    Dates: {hp['start_date']} to {hp['end_date']} ({days} DDR days){md_range}"
             )
 
-    # Phase summary
+            # Find casing point (end of section)
+            for s in statuses:
+                if s[0] == hp["end_date"] and s[1]:
+                    lines.append(f"    Casing point: ~{s[1]:.0f}m MD")
+                    break
+
+            # Sub-phase activity breakdown within this hole section
+            section_acts = [
+                a for a in activities
+                if hp["start_date"] <= a[0] <= hp["end_date"]
+            ]
+            if section_acts:
+                sub_counts = {}
+                problems = 0
+                for a in section_acts:
+                    phase = _classify_activity(a[4]) if a[4] else "Unknown"
+                    sub_counts[phase] = sub_counts.get(phase, 0) + 1
+                    if a[5] == "problem":
+                        problems += 1
+                total_sub = sum(sub_counts.values())
+                top_subs = sorted(sub_counts.items(), key=lambda x: -x[1])[:5]
+                sub_str = ", ".join(
+                    f"{name} {cnt}/{total_sub} ({cnt/total_sub*100:.0f}%)"
+                    for name, cnt in top_subs
+                )
+                lines.append(f"    Activities: {total_sub} total — {sub_str}")
+                if problems:
+                    lines.append(f"    Problems: {problems} activities with issues")
+
+            # DDR summary evidence for this phase
+            phase_summaries = [
+                s[5] for s in statuses
+                if hp["start_date"] <= s[0] <= hp["end_date"] and s[5]
+            ]
+            if phase_summaries:
+                first_summary = phase_summaries[0][:150]
+                lines.append(f"    Evidence: \"{first_summary}\"")
+            lines.append("")
+
+    # --- STEP 2: Depth progression validation ---
+    lines.append("DEPTH PROGRESSION VALIDATION:")
+    prev_md = None
+    reversals = []
+    for s in statuses:
+        if s[1] is not None:
+            if prev_md is not None and s[1] < prev_md - 10:
+                reversals.append({"date": s[0], "from": prev_md, "to": s[1]})
+            prev_md = s[1]
+    if reversals:
+        lines.append(f"  Depth reversals detected: {len(reversals)} (may indicate trips, sidetracks, or reaming)")
+        for r in reversals[:3]:
+            lines.append(f"    {r['date']}: {r['from']:.0f}m → {r['to']:.0f}m (drop of {r['from']-r['to']:.0f}m)")
+    else:
+        lines.append("  Depth monotonically increasing — no significant reversals detected.")
+
+    # --- STEP 3: Activity-level phase distribution ---
+    lines.append("\nACTIVITY PHASE DISTRIBUTION:")
     phase_counts = {}
-    for p in phases:
-        name = p["phase"]
-        if name not in phase_counts:
-            phase_counts[name] = {"count": 0, "problems": 0}
-        phase_counts[name]["count"] += p["activity_count"]
-        phase_counts[name]["problems"] += p["problems"]
+    for a in activities:
+        phase = _classify_activity(a[4]) if a[4] else "Unknown"
+        phase_counts[phase] = phase_counts.get(phase, 0) + 1
+    total = sum(phase_counts.values())
+    for name, cnt in sorted(phase_counts.items(), key=lambda x: -x[1]):
+        pct = cnt / total * 100 if total else 0
+        lines.append(f"  {name}: {cnt} activities ({pct:.1f}%)")
 
-    lines.append("\nPhase Distribution (by activity count):")
-    total = sum(v["count"] for v in phase_counts.values())
-    for name, v in sorted(phase_counts.items(), key=lambda x: -x[1]["count"]):
-        pct = v["count"] / total * 100 if total else 0
-        prob = f" [{v['problems']} problems]" if v["problems"] else ""
-        lines.append(f"  {name}: {v['count']} activities ({pct:.1f}%){prob}")
-
-    # Chronological phase timeline
-    lines.append("\nChronological Phase Timeline:")
-    for i, p in enumerate(phases):
-        depth_str = ""
-        if p["start_depth"] and p["end_depth"]:
-            depth_str = f" | Depth: {p['start_depth']:.0f}m → {p['end_depth']:.0f}m"
-        elif p["start_depth"]:
-            depth_str = f" | Depth: {p['start_depth']:.0f}m"
-
-        prob_str = f" [!{p['problems']} problems]" if p["problems"] else ""
-        lines.append(
-            f"  {i + 1}. {p['phase']}: {p['start_date']} to {p['end_date']}"
-            f"{depth_str} ({p['activity_count']} activities){prob_str}"
-        )
-        for comment in p["sample_comments"][:1]:
-            short = comment[:150] + "..." if len(comment) > 150 else comment
-            lines.append(f"     Evidence: \"{short}\"")
+    # --- STEP 4: Confidence assessment ---
+    lines.append("\nPHASE DETECTION CONFIDENCE:")
+    has_hole_sizes = len(hole_phases) > 1
+    has_activities = len(activities) > 20
+    has_summaries = any(s[5] for s in statuses)
+    if has_hole_sizes and has_activities and has_summaries:
+        lines.append("  Level: HIGH")
+        lines.append("  Basis: Hole size changes confirmed by activity code transitions and DDR summaries.")
+    elif has_activities and has_summaries:
+        lines.append("  Level: MEDIUM")
+        lines.append("  Basis: Activity codes present but no hole size data to confirm major phase boundaries.")
+    else:
+        lines.append("  Level: LOW")
+        lines.append("  Basis: Sparse data — limited activities or missing DDR summaries.")
 
     return "\n".join(lines)

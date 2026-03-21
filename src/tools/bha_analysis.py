@@ -1,7 +1,6 @@
-"""Tool: Analyze BHA (Bottom Hole Assembly) configurations from DDR data."""
+"""Tool: Analyze BHA configurations using WITSML structured data + DDR context."""
 
 import logging
-import re
 from typing import Optional
 
 import duckdb
@@ -16,187 +15,211 @@ def _get_con() -> duckdb.DuckDBPyConnection:
 
 
 def get_bha_configurations(well: str) -> str:
-    """Analyze BHA configurations and their performance for a well.
+    """Analyze BHA configurations and their drilling performance for a well.
 
-    Extracts BHA-related information from DDR activity comments,
-    identifies runs, and correlates with drilling performance.
+    Uses WITSML structured data (bha_runs + mudlog) for actual drilling
+    parameters, cross-referenced with DDR activity comments for context.
 
     Args:
-        well: Well name (underscore format)
+        well: Well name (underscore format, e.g. '15_9_F_11_T2')
 
     Returns:
-        BHA configuration analysis with performance metrics
+        BHA run analysis with performance metrics, rankings, and DDR evidence
     """
     con = _get_con()
-    like_pattern = well.replace("*", "%")
+    like = well.replace("*", "%")
 
-    # Get drilling activities with comments mentioning BHA, bit, or tool changes
-    activities = con.execute("""
-        SELECT date, start_time, end_time, depth_m, activity_code,
-               state, comments
-        FROM ddr_activities
+    # 1. Get official BHA runs from WITSML
+    bha_runs = con.execute("""
+        SELECT run_name, start_time, end_time, num_bit_run, num_string_run,
+               md_start_m, md_stop_m
+        FROM witsml_bha_runs
         WHERE well LIKE ?
-          AND activity_code != ''
-        ORDER BY date, start_time
-    """, [like_pattern]).fetchall()
+        ORDER BY start_time
+    """, [like]).fetchall()
 
-    # Get depth progression for ROP calculation
-    depths = con.execute("""
+    # 2. Get mudlog drilling parameters
+    mudlog = con.execute("""
+        SELECT md_top_m, md_bottom_m, lith_type, lith_pct,
+               rop_avg_m_per_hr, wob_avg_kN, torque_avg_kNm, rpm_avg,
+               mud_weight_sg, ecd_sg, dxc
+        FROM witsml_mudlog
+        WHERE well LIKE ?
+          AND rop_avg_m_per_hr IS NOT NULL
+          AND rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr < 500
+        ORDER BY md_top_m
+    """, [like]).fetchall()
+
+    # 3. Get DDR depth progression and hole sizes
+    ddr_status = con.execute("""
         SELECT date, md_m, hole_diameter_in, dist_drill_m
         FROM ddr_status
         WHERE well LIKE ?
         ORDER BY date
-    """, [like_pattern]).fetchall()
+    """, [like]).fetchall()
+
+    # 4. Get DDR comments mentioning BHA/bit for narrative evidence
+    bha_comments = con.execute("""
+        SELECT date, depth_m, activity_code, comments
+        FROM ddr_activities
+        WHERE well LIKE ?
+          AND comments IS NOT NULL
+          AND (LOWER(comments) LIKE '%bha%' OR LOWER(comments) LIKE '%bit%'
+               OR LOWER(comments) LIKE '%pick up%' OR LOWER(comments) LIKE '%p/u%'
+               OR LOWER(comments) LIKE '%tripped out%' OR LOWER(comments) LIKE '%pooh%'
+               OR LOWER(comments) LIKE '%new assembly%')
+        ORDER BY date, start_time
+    """, [like]).fetchall()
 
     con.close()
 
-    if not activities:
-        return f"No activity data found for well '{well}'"
-
     lines = [f"=== BHA Configuration Analysis for {display_well_name(well)} ===\n"]
 
-    # Extract BHA-related events from comments
-    bha_events = []
-    drilling_runs = []
-    current_run_start = None
-    current_run_start_depth = None
-    current_hole = None
-
-    for act in activities:
-        code = (act[4] or "").lower()
-        comments = act[6] or ""
-        comments_lower = comments.lower()
-
-        # Detect BHA/bit changes
-        is_bha_event = any(kw in comments_lower for kw in [
-            "pick up", "p/u", "ran in hole", "r.i.h", "rih",
-            "bha", "bit", "new assembly", "changed bit",
-            "tripped out", "t.o.o.h", "pooh", "pulled out",
-            "new bha", "make up bha", "m/u bha",
-        ])
-
-        if is_bha_event and ("trip" in code or "equipment" in code or "drill" in code):
-            bha_events.append({
-                "date": act[0],
-                "depth_m": act[3],
-                "code": act[4],
-                "comments": comments[:200],
-            })
-
-        # Track drilling runs (continuous drilling sequences)
-        if "drill" in code and "drill" in code:
-            if current_run_start is None:
-                current_run_start = act[0]
-                current_run_start_depth = act[3]
-        else:
-            if current_run_start is not None and current_run_start_depth:
-                drilling_runs.append({
-                    "start_date": current_run_start,
-                    "end_date": act[0],
-                    "start_depth": current_run_start_depth,
-                    "end_depth": act[3] or current_run_start_depth,
-                })
-                current_run_start = None
-                current_run_start_depth = None
-
-    if current_run_start and current_run_start_depth:
-        last_act = activities[-1]
-        drilling_runs.append({
-            "start_date": current_run_start,
-            "end_date": last_act[0],
-            "start_depth": current_run_start_depth,
-            "end_depth": last_act[3] or current_run_start_depth,
-        })
-
-    # BHA Events Timeline
-    if bha_events:
-        lines.append("BHA/Bit Change Events:")
-        for ev in bha_events:
-            depth = f"{ev['depth_m']:.0f}m" if ev['depth_m'] else "N/A"
-            lines.append(f"  {ev['date']} @ {depth}: {ev['comments']}")
-        lines.append("")
-
-    # Drilling Runs Analysis
-    if drilling_runs:
-        lines.append(f"Drilling Runs Identified: {len(drilling_runs)}")
-        lines.append("")
-        for i, run in enumerate(drilling_runs):
-            drilled = (run["end_depth"] or 0) - (run["start_depth"] or 0)
+    # --- Section A: Official BHA Runs ---
+    if bha_runs:
+        lines.append(f"Official BHA Runs (from WITSML): {len(bha_runs)}\n")
+        for i, run in enumerate(bha_runs):
+            name = run[0] or f"Run {i+1}"
+            start = run[1][:10] if run[1] else "?"
+            end = run[2][:10] if run[2] else "?"
+            md_s = f"{run[5]:.0f}m" if run[5] is not None else "?"
+            md_e = f"{run[6]:.0f}m" if run[6] is not None else "?"
+            bit_num = run[3] or ""
+            str_num = run[4] or ""
+            ids = []
+            if bit_num:
+                ids.append(f"bit#{bit_num}")
+            if str_num:
+                ids.append(f"string#{str_num}")
+            id_str = f" ({', '.join(ids)})" if ids else ""
             lines.append(
-                f"  Run {i + 1}: {run['start_date']} to {run['end_date']}"
-                f" | {run['start_depth']:.0f}m → {run['end_depth']:.0f}m"
-                f" | Drilled: {drilled:.0f}m"
+                f"  {name}{id_str}: {start} to {end} | MD: {md_s} → {md_e}"
             )
+    else:
+        lines.append("No WITSML BHA run data available for this well.")
 
-    # Drilling parameters extracted from comments
-    rop_values = []
-    wob_values = []
-    rpm_values = []
+    # --- Section B: Drilling Parameters from MudLog ---
+    if mudlog:
+        lines.append(f"\nDrilling Parameters (from WITSML MudLog): {len(mudlog)} depth intervals\n")
 
-    for act in activities:
-        comments = act[6] or ""
-        code = (act[4] or "").lower()
-        if "drill" not in code:
-            continue
+        # Group by hole section using DDR hole sizes
+        hole_map = {}
+        for d in ddr_status:
+            if d[1] and d[2]:
+                hole_map[d[1]] = d[2]
 
-        # Extract ROP from comments
-        rop_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:m/hr|m/h|meter/hour|metres/hour)", comments, re.I)
-        if rop_match:
-            rop_values.append(float(rop_match.group(1)))
+        def _get_hole_size(depth: float) -> Optional[float]:
+            best_hole = None
+            best_dist = float("inf")
+            for md, hole in hole_map.items():
+                dist = abs(md - depth)
+                if dist < best_dist:
+                    best_dist = dist
+                    best_hole = hole
+            return best_hole
 
-        # Extract WOB
-        wob_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:tons?\s*WOB|MT\s*WOB|WOB)", comments, re.I)
-        if not wob_match:
-            wob_match = re.search(r"WOB\s*(\d+(?:\.\d+)?)", comments, re.I)
-        if wob_match:
-            wob_values.append(float(wob_match.group(1)))
+        # Compute stats per hole section
+        section_stats = {}
+        for ml in mudlog:
+            md_mid = ((ml[0] or 0) + (ml[1] or 0)) / 2
+            hole = _get_hole_size(md_mid)
+            key = f"{hole}\"" if hole else "Unknown"
+            if key not in section_stats:
+                section_stats[key] = {
+                    "rop": [], "wob": [], "torque": [], "rpm": [],
+                    "mw": [], "ecd": [], "intervals": 0,
+                    "md_min": ml[0], "md_max": ml[1], "liths": {},
+                }
+            s = section_stats[key]
+            s["intervals"] += 1
+            if ml[1] and (s["md_max"] is None or ml[1] > s["md_max"]):
+                s["md_max"] = ml[1]
+            if ml[0] and (s["md_min"] is None or ml[0] < s["md_min"]):
+                s["md_min"] = ml[0]
+            if ml[4] is not None:
+                s["rop"].append(ml[4])
+            if ml[5] is not None:
+                s["wob"].append(ml[5])
+            if ml[6] is not None:
+                s["torque"].append(ml[6])
+            if ml[7] is not None:
+                s["rpm"].append(ml[7])
+            if ml[8] is not None:
+                s["mw"].append(ml[8])
+            if ml[9] is not None:
+                s["ecd"].append(ml[9])
+            lith = ml[2] or "unknown"
+            s["liths"][lith] = s["liths"].get(lith, 0) + 1
 
-        # Extract RPM
-        rpm_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:rpm|RPM)", comments, re.I)
-        if rpm_match:
-            rpm_values.append(float(rpm_match.group(1)))
+        def _avg(vals):
+            return sum(vals) / len(vals) if vals else 0
 
-    if rop_values or wob_values or rpm_values:
-        lines.append("\nDrilling Parameters (from DDR comments):")
-        if rop_values:
+        lines.append(f"{'Section':<12} {'Depth Range':<22} {'Avg ROP':>10} {'Avg WOB':>10} "
+                      f"{'Avg Torque':>12} {'Avg RPM':>10} {'MW (sg)':>10} {'Intervals':>10}")
+        lines.append("-" * 100)
+
+        ranked_sections = []
+        for sec, s in sorted(section_stats.items(),
+                              key=lambda x: x[1].get("md_min") or 0):
+            avg_rop = _avg(s["rop"])
+            avg_wob = _avg(s["wob"])
+            avg_tq = _avg(s["torque"])
+            avg_rpm = _avg(s["rpm"])
+            avg_mw = _avg(s["mw"])
+            md_range = f"{s['md_min']:.0f}-{s['md_max']:.0f}m" if s["md_min"] and s["md_max"] else "?"
             lines.append(
-                f"  ROP: min={min(rop_values):.1f}, max={max(rop_values):.1f}, "
-                f"avg={sum(rop_values)/len(rop_values):.1f} m/hr "
-                f"({len(rop_values)} readings)"
+                f"  {sec:<10} {md_range:<22} {avg_rop:>8.1f}m/h {avg_wob:>8.1f}kN "
+                f"{avg_tq:>10.1f}kNm {avg_rpm:>8.0f} {avg_mw:>8.3f} {s['intervals']:>10}"
             )
-        if wob_values:
-            lines.append(
-                f"  WOB: min={min(wob_values):.1f}, max={max(wob_values):.1f}, "
-                f"avg={sum(wob_values)/len(wob_values):.1f} tons "
-                f"({len(wob_values)} readings)"
-            )
-        if rpm_values:
-            lines.append(
-                f"  RPM: min={min(rpm_values):.1f}, max={max(rpm_values):.1f}, "
-                f"avg={sum(rpm_values)/len(rpm_values):.1f} "
-                f"({len(rpm_values)} readings)"
-            )
+            ranked_sections.append((sec, avg_rop, s))
 
-    # Per-hole-section performance
-    if depths:
-        lines.append("\nPerformance by Hole Section:")
-        by_hole = {}
-        for d in depths:
-            h = d[2]
-            if h:
-                if h not in by_hole:
-                    by_hole[h] = {"dists": [], "dates": []}
-                if d[3] and d[3] > 0:
+        # Top lithologies per section
+        lines.append("\nLithology by Section:")
+        for sec, s in sorted(section_stats.items(),
+                              key=lambda x: x[1].get("md_min") or 0):
+            top_liths = sorted(s["liths"].items(), key=lambda x: -x[1])[:3]
+            lith_str = ", ".join(f"{l} ({c})" for l, c in top_liths)
+            lines.append(f"  {sec}: {lith_str}")
+
+        # --- Section C: Performance Ranking ---
+        if ranked_sections:
+            lines.append("\nPerformance Ranking (by average ROP):")
+            for rank, (sec, avg_rop, s) in enumerate(
+                sorted(ranked_sections, key=lambda x: -x[1]), 1
+            ):
+                md_range = f"{s['md_min']:.0f}-{s['md_max']:.0f}m" if s["md_min"] and s["md_max"] else "?"
+                rop_range = ""
+                if s["rop"]:
+                    rop_range = f" (min={min(s['rop']):.1f}, max={max(s['rop']):.1f})"
+                lines.append(
+                    f"  {rank}. {sec} @ {md_range}: avg ROP {avg_rop:.1f} m/hr{rop_range}"
+                )
+    else:
+        lines.append("\nNo WITSML mudlog data available. Using DDR-based analysis.")
+        # Fallback: DDR-based hole section performance
+        if ddr_status:
+            by_hole = {}
+            for d in ddr_status:
+                h = d[2]
+                if h and d[3] and d[3] > 0:
+                    if h not in by_hole:
+                        by_hole[h] = {"dists": [], "dates": []}
                     by_hole[h]["dists"].append(d[3])
-                by_hole[h]["dates"].append(d[0])
+                    by_hole[h]["dates"].append(d[0])
+            if by_hole:
+                lines.append("\nPerformance by Hole Section (DDR daily progress):")
+                for hole, info in sorted(by_hole.items(), key=lambda x: x[0], reverse=True):
+                    n_days = len(info["dates"])
+                    total = sum(info["dists"])
+                    avg = total / n_days if n_days else 0
+                    lines.append(f"  {hole}\" hole: {n_days} days, {total:.0f}m drilled, avg {avg:.1f} m/day")
 
-        for hole, info in sorted(by_hole.items(), key=lambda x: x[0], reverse=True):
-            n_days = len(info["dates"])
-            total_drilled = sum(info["dists"])
-            avg = total_drilled / n_days if n_days else 0
-            lines.append(
-                f"  {hole}\" hole: {n_days} days, "
-                f"{total_drilled:.0f}m drilled, avg {avg:.1f} m/day"
-            )
+    # --- Section D: DDR Evidence ---
+    if bha_comments:
+        lines.append(f"\nDDR Report Evidence ({len(bha_comments)} BHA-related entries):")
+        for bc in bha_comments[:8]:
+            depth = f"{bc[1]:.0f}m" if bc[1] else "?"
+            comment = (bc[3] or "")[:180]
+            lines.append(f"  {bc[0]} @ {depth}: \"{comment}\"")
 
     return "\n".join(lines)

@@ -7,3 +7,7 @@ __pycache__/
 *.egg-info/
 venv/
 .venv/
+.pytest_cache/
+.claude/
+CLAUDE_CODE_PROMPT.md
+WINNING_PUSH.md

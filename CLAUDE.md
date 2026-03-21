@@ -145,11 +145,11 @@ All core phases are implemented and tested:
 1. **DDR XML parsing** — All 1,759 files parsed → 23,447 activities, 26,965 text docs, zero errors
 2. **WITSML real-time data** — 161 BHA runs, 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 4,217 trajectory stations, 11,134 messages
 3. **Vector store** — 26,965 DDR text documents embedded in ChromaDB (text-embedding-3-small)
-4. **Agent tools** — 8 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection
+4. **Agent tools** — 9 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection, formation_context
 5. **Orchestrator** — GPT-4o agent with tool calling via OpenAI SDK (max 10 rounds)
 6. **CLI** — `python -m src.main ingest|ask|demo`
-7. **Tests** — 69 tests across 4 test files, all passing
-8. **Presentation** — TODO: 5-minute slide deck
+7. **Tests** — 86 tests across 4 test files, all passing
+8. **Presentation** — 8 slides in `presentation/slides.pptx`
 
 ### DuckDB Tables (12 total)
 DDR: `ddr_status`, `ddr_activities`, `ddr_fluids`, `ddr_surveys`, `wellbore_info`
@@ -246,7 +246,7 @@ Use these to validate the system works end-to-end:
 - [x] `python -m src.main ask "question"` produces structured, evidence-backed answers
 - [x] `python -m src.main demo` runs all 6 demo questions
 - [x] All 6 question categories produce quality answers
-- [x] 69 unit tests passing (`python -m pytest tests/ -v`)
+- [x] 86 unit tests passing (`python -m pytest tests/ -v`)
 - [x] No API keys in the code
-- [ ] Presentation slides (5 minutes max)
+- [x] Presentation slides (8 slides in `presentation/slides.pptx`)
 - [ ] svpoludasu@gmail.com added as GitHub collaborator

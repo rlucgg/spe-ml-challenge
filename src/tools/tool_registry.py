@@ -11,6 +11,7 @@ from src.tools.efficiency_metrics import compute_efficiency_metrics
 from src.tools.compare_wells import compare_wells
 from src.tools.bha_analysis import get_bha_configurations
 from src.tools.issue_detection import identify_operational_issues
+from src.tools.formation_context import get_formation_context
 
 logger = logging.getLogger(__name__)
 
@@ -196,8 +197,9 @@ TOOL_DEFINITIONS = [
             "name": "get_bha_configurations",
             "description": (
                 "Analyze BHA configurations and drilling performance for a well. "
-                "Extracts BHA/bit change events, drilling runs, and parameters "
-                "(ROP, WOB, RPM) from DDR comments."
+                "Uses WITSML structured data: official BHA runs (161 total) with depth ranges, "
+                "mudlog drilling parameters (ROP m/hr, WOB kN, torque kNm, RPM) per depth interval, "
+                "performance ranking by hole section, lithology correlation, and DDR report evidence."
             ),
             "parameters": {
                 "type": "object",
@@ -240,6 +242,31 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_formation_context",
+            "description": (
+                "Get geological formation context for a well at a specific depth. "
+                "Returns which formation a depth falls in, formation column, "
+                "and surrounding formations. Uses formation_tops table (409 records)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "well": {
+                        "type": "string",
+                        "description": "Well name (underscore format)"
+                    },
+                    "depth_m": {
+                        "type": "number",
+                        "description": "Measured depth in meters (optional — omit for full formation column)"
+                    },
+                },
+                "required": ["well"],
+            },
+        },
+    },
 ]
 
 # Dispatch map: function name -> callable
@@ -269,6 +296,10 @@ TOOL_FUNCTIONS = {
         well=args["well"],
         date_from=args.get("date_from"),
         date_to=args.get("date_to"),
+    ),
+    "get_formation_context": lambda args: get_formation_context(
+        well=args["well"],
+        depth_m=args.get("depth_m"),
     ),
 }
 

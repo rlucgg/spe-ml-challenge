@@ -40,7 +40,6 @@ class TestQueryData:
             "SELECT * FROM ddr_activities WHERE well = '15_9_F_11_T2'", limit=5
         )
         lines = [l for l in result.split("\n") if l.strip() and not l.startswith("-")]
-        # Header + up to 5 data rows + summary
         assert len(lines) <= 8
 
     def test_witsml_tables_queryable(self):
@@ -80,8 +79,25 @@ class TestPhaseDetection:
     def test_hole_sections_detected(self):
         from src.tools.phase_detection import get_drilling_phases
         result = get_drilling_phases("15_9_F_11_T2")
-        assert '26' in result  # 26" hole section
-        assert '17.5' in result or '17 1/2' in result  # 17.5" hole section
+        assert '26' in result
+        assert '17.5' in result or '17 1/2' in result
+
+    def test_major_phases_present(self):
+        from src.tools.phase_detection import get_drilling_phases
+        result = get_drilling_phases("15_9_F_11_T2")
+        assert "MAJOR PHASES" in result
+        assert "Surface" in result or "26\"" in result
+
+    def test_depth_validation_present(self):
+        from src.tools.phase_detection import get_drilling_phases
+        result = get_drilling_phases("15_9_F_11_T2")
+        assert "DEPTH PROGRESSION" in result
+
+    def test_confidence_assessment_present(self):
+        from src.tools.phase_detection import get_drilling_phases
+        result = get_drilling_phases("15_9_F_11_T2")
+        assert "CONFIDENCE" in result
+        assert "HIGH" in result or "MEDIUM" in result or "LOW" in result
 
 
 class TestEfficiencyMetrics:
@@ -117,12 +133,65 @@ class TestIssueDetection:
 
 
 class TestBhaAnalysis:
-    """Test the BHA analysis tool."""
+    """Test the BHA analysis tool (rewritten with WITSML data)."""
 
     def test_returns_analysis(self):
         from src.tools.bha_analysis import get_bha_configurations
         result = get_bha_configurations("15_9_F_11_T2")
         assert "BHA Configuration" in result
+
+    def test_has_official_runs(self):
+        from src.tools.bha_analysis import get_bha_configurations
+        result = get_bha_configurations("15_9_F_11_T2")
+        assert "Official BHA Runs" in result
+        assert "WITSML" in result
+
+    def test_has_mudlog_params(self):
+        from src.tools.bha_analysis import get_bha_configurations
+        result = get_bha_configurations("15_9_F_11_T2")
+        assert "Drilling Parameters" in result or "MudLog" in result
+        assert "ROP" in result or "m/h" in result
+
+    def test_has_performance_ranking(self):
+        from src.tools.bha_analysis import get_bha_configurations
+        result = get_bha_configurations("15_9_F_11_T2")
+        assert "Performance Ranking" in result or "Ranking" in result
+
+    def test_has_ddr_evidence(self):
+        from src.tools.bha_analysis import get_bha_configurations
+        result = get_bha_configurations("15_9_F_11_T2")
+        assert "DDR Report Evidence" in result or "DDR" in result
+
+    def test_well_without_witsml(self):
+        """Wells without WITSML data should fallback gracefully."""
+        from src.tools.bha_analysis import get_bha_configurations
+        result = get_bha_configurations("15_9_19_A")
+        assert "BHA Configuration" in result
+        assert "No WITSML" in result or "No activity" in result
+
+
+class TestFormationContext:
+    """Test the formation context tool."""
+
+    def test_returns_formations(self):
+        from src.tools.formation_context import get_formation_context
+        result = get_formation_context("15_9_F_11")
+        assert "formation" in result.lower() or "Formation" in result
+
+    def test_depth_lookup(self):
+        from src.tools.formation_context import get_formation_context
+        result = get_formation_context("15_9_F_11", depth_m=3000.0)
+        assert "Current formation" in result or "formation" in result.lower()
+
+    def test_full_column(self):
+        from src.tools.formation_context import get_formation_context
+        result = get_formation_context("15_9_F_11")
+        assert "Complete formation column" in result or "Hugin" in result
+
+    def test_unknown_well_fallback(self):
+        from src.tools.formation_context import get_formation_context
+        result = get_formation_context("NONEXISTENT_WELL")
+        assert "No formation" in result or "Available wells" in result
 
 
 class TestSearchReports:
@@ -152,6 +221,10 @@ class TestToolRegistry:
             name = defn["function"]["name"]
             assert name in TOOL_FUNCTIONS, f"Tool {name} not in dispatch map"
 
+    def test_tool_count(self):
+        from src.tools.tool_registry import TOOL_DEFINITIONS
+        assert len(TOOL_DEFINITIONS) == 9  # 8 original + formation_context
+
     def test_execute_tool(self):
         from src.tools.tool_registry import execute_tool
         import json
@@ -161,7 +234,52 @@ class TestToolRegistry:
         )
         assert "15/9-F-11 T2" in result
 
+    def test_execute_formation_tool(self):
+        from src.tools.tool_registry import execute_tool
+        import json
+        result = execute_tool(
+            "get_formation_context",
+            json.dumps({"well": "15_9_F_11", "depth_m": 3000.0})
+        )
+        assert "formation" in result.lower()
+
     def test_unknown_tool(self):
         from src.tools.tool_registry import execute_tool
         result = execute_tool("nonexistent_tool", "{}")
         assert "Error" in result
+
+
+class TestOutputFormatter:
+    """Test the output formatter validation."""
+
+    def test_validate_good_answer(self):
+        from src.agent.output_formatter import validate_answer
+        answer = """## Answer
+        The well drilled 3 sections in 53 days.
+        ## Evidence from Drilling Data
+        At 2574m MD, ROP averaged 29.2 m/hr.
+        ## Evidence from Daily Reports
+        DDR 15/9-F-11 T2, 2013-04-15: "Set 13-3/8 casing at 2145m."
+        ## Reasoning
+        Step 1: Analyzed hole sizes.
+        ## Assumptions
+        Activity codes are correct.
+        ## Confidence & Uncertainty
+        HIGH — multiple data sources confirm."""
+        result = validate_answer(answer)
+        assert result["valid"]
+        assert result["has_measurement"]
+        assert len(result["warnings"]) == 0 or len(result["warnings"]) <= 1
+
+    def test_validate_missing_sections(self):
+        from src.agent.output_formatter import validate_answer
+        answer = "## Answer\nThe well was drilled successfully."
+        result = validate_answer(answer)
+        assert not result["valid"]
+        assert len(result["missing_sections"]) > 0
+
+    def test_format_answer_shows_warnings(self):
+        from src.agent.output_formatter import format_answer
+        formatted = format_answer("Just a plain answer.", "Test question?")
+        assert "QUESTION:" in formatted
+        assert "Missing sections" in formatted
