@@ -71,7 +71,7 @@ python -m src.main demo --save
 User Question
      |
      v
-GPT-4o Agent (tool calling, max 10 rounds, retry with backoff)
+GPT-5.4 mini Agent (tool calling, max 10 rounds, retry with backoff)
      |
      |-- query_drilling_data       SQL on 12 DuckDB tables
      |-- search_daily_reports      Semantic search on 26,965 ChromaDB docs
@@ -124,7 +124,8 @@ python presentation/create_slides.py
 
 ## Technology
 
-- **LLM**: OpenAI GPT-4o with function calling (max 10 rounds, temperature 0.1, retry with exponential backoff)
+- **LLM**: OpenAI GPT-5.4 mini with extended reasoning (configurable via `OPENAI_MODEL` env var, falls back to GPT-4o if set)
+- **Reasoning**: `reasoning_effort=high` for deep drilling domain analysis (configurable via `REASONING_EFFORT` env var)
 - **Vector Store**: ChromaDB with OpenAI text-embedding-3-small (26,965 documents)
 - **Database**: DuckDB (12 tables, in-process analytical SQL)
 - **XML Parsing**: lxml (WITSML 1.4.0 DDR + WITSML 1.4.1 real-time)

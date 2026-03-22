@@ -146,7 +146,7 @@ All core phases are implemented and tested:
 2. **WITSML real-time data** — 161 BHA runs, 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 4,217 trajectory stations, 11,134 messages
 3. **Vector store** — 26,965 DDR text documents embedded in ChromaDB (text-embedding-3-small)
 4. **Agent tools** — 9 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection, formation_context
-5. **Orchestrator** — GPT-4o agent with tool calling via OpenAI SDK (max 10 rounds)
+5. **Orchestrator** — GPT-5.4 mini agent with tool calling via OpenAI SDK (max 10 rounds)
 6. **CLI** — `python -m src.main ingest|ask|demo`
 7. **Tests** — 86 tests across 4 test files, all passing
 8. **Presentation** — 8 slides in `presentation/slides.pptx`
@@ -159,7 +159,7 @@ Other: `formation_tops`, `perforations`, `production`
 ## Technology Stack
 
 - Python 3.10+
-- openai (SDK for GPT-4o tool calling)
+- openai (SDK for GPT-5.4 mini tool calling)
 - duckdb (in-process analytical SQL)
 - chromadb (vector store for text search)
 - lxml (XML parsing)

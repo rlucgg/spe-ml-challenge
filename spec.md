@@ -167,7 +167,7 @@ Build an intelligent AI agent that reads drilling data and daily reports from th
                    │
                    ▼
 ┌──────────────────────────────────────────────────────┐
-│              ORCHESTRATOR AGENT (GPT-4o)              │
+│              ORCHESTRATOR AGENT (GPT-5.4 mini)              │
 │  - Understands the question category                  │
 │  - Plans which tools to call and in what order        │
 │  - Synthesizes evidence into structured answer        │
@@ -257,8 +257,8 @@ Output: ChromaDB collection with OpenAI text-embedding-3-small embeddings
 
 #### C. Orchestrator Agent (`src/agent/`)
 
-**LLM:** OpenAI GPT-4o (best balance of reasoning + speed + tool calling)
-- Falls back to GPT-4o-mini for simple lookups
+**LLM:** OpenAI GPT-5.4 mini (best balance of reasoning + speed + tool calling)
+- Falls back to GPT-5.4 nano for simple lookups
 - System prompt includes drilling domain knowledge primer
 - Tool-calling with structured outputs
 
@@ -334,7 +334,7 @@ Algorithm:
 | Component | Technology | Rationale |
 |---|---|---|
 | Language | Python 3.10+ | Universal, rich ecosystem |
-| LLM | OpenAI GPT-4o via API | Best tool-calling, reasoning quality; judges have own keys |
+| LLM | OpenAI GPT-5.4 mini via API | Best tool-calling, reasoning quality; judges have own keys |
 | Embeddings | OpenAI text-embedding-3-small | Cost-effective, excellent retrieval |
 | Vector Store | ChromaDB | Lightweight, no server needed, pip install |
 | Structured DB | DuckDB | In-process analytical SQL, fast, no server |
@@ -393,7 +393,7 @@ spe-ml-challenge/
 │   │
 │   ├── agent/                   # LLM agent
 │   │   ├── __init__.py
-│   │   ├── orchestrator.py      # GPT-4o agent loop with tool calling (max 10 rounds)
+│   │   ├── orchestrator.py      # GPT-5.4 mini agent loop with tool calling (max 10 rounds)
 │   │   ├── prompts.py           # System prompt with drilling domain knowledge
 │   │   └── output_formatter.py  # Structured answer formatting
 │   │
@@ -440,7 +440,7 @@ spe-ml-challenge/
 ### Phase 3: Agent Core — COMPLETE
 15. **prompts.py** — System prompt with drilling domain knowledge + WITSML data awareness
 16. **tool_registry.py** — 8 OpenAI function definitions with full schema descriptions
-17. **orchestrator.py** — GPT-4o agent loop with tool calling (max 10 rounds, temperature 0.1)
+17. **orchestrator.py** — GPT-5.4 mini agent loop with tool calling (max 10 rounds, temperature 0.1)
 18. **output_formatter.py** — Structured answer formatting per problem statement
 
 ### Phase 4: CLI & Quality — COMPLETE

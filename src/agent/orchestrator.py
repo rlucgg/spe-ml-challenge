@@ -1,4 +1,4 @@
-"""Agent orchestrator: GPT-4o with tool calling for drilling analysis."""
+"""Agent orchestrator: GPT-5.4 mini with tool calling for drilling analysis."""
 
 import json
 import logging
@@ -7,7 +7,7 @@ from typing import Optional
 
 from openai import OpenAI
 
-from src.config import OPENAI_API_KEY, LLM_MODEL
+from src.config import OPENAI_API_KEY, LLM_MODEL, REASONING_EFFORT
 from src.agent.prompts import SYSTEM_PROMPT
 from src.tools.tool_registry import TOOL_DEFINITIONS, execute_tool
 
@@ -36,19 +36,44 @@ def _is_retryable(error: Exception) -> bool:
     return False
 
 
+def _build_create_kwargs(messages: list, tools: list) -> dict:
+    """Build kwargs for chat completions, handling reasoning_effort compatibility."""
+    kwargs = {
+        "model": LLM_MODEL,
+        "messages": messages,
+        "tools": tools,
+    }
+    if REASONING_EFFORT and REASONING_EFFORT != "none":
+        kwargs["reasoning_effort"] = REASONING_EFFORT
+        kwargs["max_completion_tokens"] = 4096
+        # temperature is incompatible with reasoning_effort > "none"
+    else:
+        kwargs["temperature"] = 0.1
+        kwargs["max_completion_tokens"] = 4096
+    return kwargs
+
+
 def _call_with_retry(client: OpenAI, messages: list, tools: list) -> object:
     """Call OpenAI API with exponential backoff retry on transient errors."""
+    kwargs = _build_create_kwargs(messages, tools)
+
     for attempt in range(MAX_RETRIES):
         try:
-            return client.chat.completions.create(
-                model=LLM_MODEL,
-                messages=messages,
-                tools=tools,
-                tool_choice="auto",
-                temperature=0.1,
-                max_tokens=4096,
-            )
+            return client.chat.completions.create(**kwargs)
         except Exception as e:
+            err_str = str(e)
+            # Fall back if reasoning_effort or max_completion_tokens not supported
+            if "reasoning_effort" in err_str or "reasoning" in err_str.lower():
+                logger.warning("reasoning_effort not supported, falling back: %s", e)
+                kwargs.pop("reasoning_effort", None)
+                kwargs["temperature"] = 0.1
+                return client.chat.completions.create(**kwargs)
+            if "max_completion_tokens" in err_str:
+                logger.warning("max_completion_tokens not supported, using max_tokens: %s", e)
+                val = kwargs.pop("max_completion_tokens", 4096)
+                kwargs["max_tokens"] = val
+                return client.chat.completions.create(**kwargs)
+
             if attempt < MAX_RETRIES - 1 and _is_retryable(e):
                 wait = 2 ** attempt
                 logger.warning(

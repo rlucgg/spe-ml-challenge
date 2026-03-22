@@ -20,7 +20,11 @@ DB_PATH = PROCESSED_DIR / "volve.duckdb"
 VECTORSTORE_DIR = PROCESSED_DIR / "vectorstore"
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o")
+
+# Model configuration — GPT-5.4 mini with extended reasoning
+DEFAULT_MODEL = "gpt-5.4-mini"
+LLM_MODEL = os.getenv("OPENAI_MODEL", os.getenv("LLM_MODEL", DEFAULT_MODEL))
+REASONING_EFFORT = os.getenv("REASONING_EFFORT", "high")  # none, low, medium, high
 EMBEDDING_MODEL = "text-embedding-3-small"
 
 WITSML_NS = {"witsml": "http://www.witsml.org/schemas/1series"}
