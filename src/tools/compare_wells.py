@@ -85,6 +85,14 @@ def compare_wells(well1: str, well2: str) -> str:
             stats["avg_daily_drill"] = 0
             stats["max_daily_drill"] = 0
 
+        # Production data
+        prod = con.execute("""
+            SELECT SUM(bore_oil_vol), SUM(bore_gas_vol), SUM(bore_wat_vol), AVG(avg_downhole_pressure)
+            FROM production
+            WHERE well LIKE ?
+        """, [like]).fetchone()
+        stats["production"] = prod if prod and prod[0] is not None else None
+
         return stats
 
     s1 = well_stats(well1)
@@ -141,5 +149,19 @@ def compare_wells(well1: str, well2: str) -> str:
     lines.append(f"  {n2}:")
     for h in s2.get("hole_sections", []):
         lines.append(f"    {h[0]}\" hole: {h[1]:.0f}m - {h[2]:.0f}m ({h[3]} days)")
+
+    # Production comparison
+    has_prod = s1.get("production") or s2.get("production")
+    if has_prod:
+        lines.append(f"\nProduction Summary:")
+        lines.append(f"{'Metric':<30} {n1:<25} {n2:<25}")
+        lines.append("-" * 80)
+        p1 = s1.get("production") or (0, 0, 0, 0)
+        p2 = s2.get("production") or (0, 0, 0, 0)
+        
+        lines.append(f"{'Cum Oil (Sm3)':<30} {p1[0] or 0:<25.1f} {p2[0] or 0:.1f}")
+        lines.append(f"{'Cum Gas (Sm3)':<30} {p1[1] or 0:<25.1f} {p2[1] or 0:.1f}")
+        lines.append(f"{'Cum Water (Sm3)':<30} {p1[2] or 0:<25.1f} {p2[2] or 0:.1f}")
+        lines.append(f"{'Avg Downhole Press (bar)':<30} {p1[3] or 0:<25.1f} {p2[3] or 0:.1f}")
 
     return "\n".join(lines)

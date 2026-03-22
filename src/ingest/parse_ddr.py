@@ -31,7 +31,7 @@ def _float(element, tag: str) -> Optional[float]:
         return None
     try:
         f = float(val)
-        return None if abs(f - SENTINEL_VALUE) < 0.01 else f
+        return None if f < -990.0 else f
     except ValueError:
         return None
 

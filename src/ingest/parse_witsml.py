@@ -181,6 +181,8 @@ def _parse_mudlog(section_dir: Path, well: str, wellbore: str) -> list[dict]:
             # RPM: c/s → RPM
             rpm_raw = _float(interval, "rpmAv")
             rpm = rpm_raw * 60.0 if rpm_raw is not None else None
+            if rpm is not None and (rpm < 0 or rpm > 300):
+                rpm = None
 
             # Mud weight and ECD: kg/m³ → sg
             mw_raw = _float(interval, "wtMudAv")
