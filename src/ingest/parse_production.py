@@ -7,6 +7,7 @@ from typing import Optional
 import pandas as pd
 
 from src.config import PRODUCTION_FILE
+from src.config import normalize_well_name
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +47,9 @@ def parse_production_data(filepath: Optional[Path] = None) -> pd.DataFrame:
         df = df.rename(columns={"npd_well_bore_code": "npd_code"})
     if "npd_well_bore_name" in df.columns:
         df = df.rename(columns={"npd_well_bore_name": "well"})
+
+    if "well" in df.columns:
+        df["well"] = df["well"].astype(str).map(normalize_well_name)
 
     logger.info("Parsed %d production records", len(df))
     return df

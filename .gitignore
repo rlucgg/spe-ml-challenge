@@ -14,3 +14,12 @@ WINNING_PUSH.md
 FINAL_PUSH_PROMPT.md
 MODEL_UPGRADE_PROMPT.md
 FINAL_FIX_PROMPT.md
+PROMPT_CODEX.md
+PROMPT_GEMINI.md
+codex_stress_test_report.md
+sanity_results.json
+sanity_results.md
+stress_test_improved_subset.json
+stress_test_improved_subset.md
+stress_test_results.json
+stress_test_results.md

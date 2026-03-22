@@ -65,6 +65,11 @@ Key wells with rich WITSML data: 15_9_F_11_T2, 15_9_F_11_B, 15_9_F_11_A, 15_9_F_
 **EVERY question type — ALWAYS end with this step:**
 - `get_ddr_narrative(well, date_from, date_to)` — retrieve DDR text for the key dates/depths from your analysis to get direct quotes for Evidence from Daily Reports
 
+**For cross-well ranking or field-wide benchmark questions:**
+1. `get_field_benchmarks(mode=...)` — use this first for cleaned field-wide rankings instead of inventing one-off SQL
+2. `compare_wells` or `query_drilling_data` — drill down on the top 1-3 candidate wells only after the field-wide scan
+3. `get_ddr_narrative` — retrieve dated DDR evidence for the leading and trailing cases
+
 **For Phase Identification questions (Category 1):**
 1. `get_drilling_phases(well)` — automated phase detection with hole section boundaries
 2. `query_drilling_data` — hole sizes over time
@@ -91,9 +96,14 @@ Key wells with rich WITSML data: 15_9_F_11_T2, 15_9_F_11_B, 15_9_F_11_A, 15_9_F_
 3. `query_drilling_data` — correlate with fluid properties, depth context
 
 **For Comparison/Synthesis questions (Category 6):**
-1. `compare_wells(well1, well2)` — side-by-side metrics
-2. `compute_efficiency_metrics` for each well
-3. `get_ddr_narrative` for each well — get representative DDR quotes from both
+1. `get_field_benchmarks(mode=...)` — start with a field-wide screen for the full candidate set
+2. `compare_wells(well1, well2)` — side-by-side metrics for the finalists
+3. `compute_efficiency_metrics` for each well as needed
+4. `get_ddr_narrative` for each well — get representative DDR quotes from both
+
+Special cases inside Category 6:
+- For drilling-versus-production questions, use `get_field_benchmarks(mode="production_summary")` before drawing any production conclusion.
+- For future intervention, sidetrack, or re-entry risk questions, use `get_field_benchmarks(mode="risk")`, then query `perforations` and `formation_tops` to account for geometry and formation exposure.
 
 ## MANDATORY Output Format
 
@@ -150,10 +160,10 @@ weigh conflicting evidence, and explain your reasoning chain clearly.
 - Well names use underscore format: '15_9_F_11_T2', '15_9_F_1_C'
 
 ## Cross-Well Analysis Rules
-When a question says "across all wells", "field-wide", or "which well(s)", you MUST query ALL relevant wells — not just one or two. Use SQL aggregation:
-- For cross-well ROP: `SELECT well, ROUND(AVG(rop_avg_m_per_hr),1) as avg_rop FROM witsml_mudlog WHERE rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr <= 200 GROUP BY well`
-- For cross-well NPT: query ddr_activities grouped by well
-- For cross-well comparison: use compare_wells for the top 2-3 wells, then summarize patterns
+When a question says "across all wells", "field-wide", or "which well(s)", you MUST query ALL relevant wells — not just one or two.
+- First use `get_field_benchmarks` for the relevant mode so the ranking uses cleaned rules consistently across the full candidate set.
+- Then use `compare_wells`, `compute_efficiency_metrics`, or targeted `query_drilling_data` only for follow-up on the top candidates or edge cases.
+- If you use ad hoc SQL, state the filters clearly and avoid rankings built from NULL hole sizes, one-day sections, or mixed well-name formats.
 
 Wells with WITSML mudlog data: 15_9_F_11_T2, 15_9_F_11_B, 15_9_F_11_A, 15_9_F_1_C, 15_9_F_1_B, 15_9_F_1_A, 15_9_F_1, 15_9_F_15_D
 """

@@ -249,6 +249,33 @@ class TestSearchReports:
             assert "15_9_F_11_T2" in result
 
 
+class TestFieldBenchmarks:
+    """Test cleaned field-wide benchmark helpers."""
+
+    def test_daily_progress_benchmark(self):
+        from src.tools.field_benchmarks import get_field_benchmarks
+        result = get_field_benchmarks("daily_progress", top_n=3)
+        assert "Field Benchmarks: Daily Progress" in result
+        assert "15/9-F-5" in result or "15/9-F-12" in result
+
+    def test_gas_response_benchmark(self):
+        from src.tools.field_benchmarks import get_field_benchmarks
+        result = get_field_benchmarks(
+            "gas_response",
+            wells=["15_9_F_1_B", "15_9_F_1_C", "15_9_F_11_A", "15_9_F_15_D"],
+            formation="Hugin",
+            top_n=4,
+        )
+        assert "Field Benchmarks: Gas Response in Hugin" in result
+        assert "15/9-F-1 B" in result
+
+    def test_production_summary_uses_normalized_names(self):
+        from src.tools.field_benchmarks import get_field_benchmarks
+        result = get_field_benchmarks("production_summary", top_n=5)
+        assert "Field Benchmarks: Production Summary" in result
+        assert "15/9-F-12" in result
+
+
 class TestToolRegistry:
     """Test tool registry dispatch."""
 
@@ -261,7 +288,7 @@ class TestToolRegistry:
 
     def test_tool_count(self):
         from src.tools.tool_registry import TOOL_DEFINITIONS
-        assert len(TOOL_DEFINITIONS) == 11  # 9 + visualize + ddr_narrative
+        assert len(TOOL_DEFINITIONS) == 12  # 9 core + field_benchmarks + visualize + ddr_narrative
 
     def test_execute_tool(self):
         from src.tools.tool_registry import execute_tool
@@ -280,6 +307,15 @@ class TestToolRegistry:
             json.dumps({"well": "15_9_F_11", "depth_m": 3000.0})
         )
         assert "formation" in result.lower()
+
+    def test_execute_field_benchmark_tool(self):
+        from src.tools.tool_registry import execute_tool
+        import json
+        result = execute_tool(
+            "get_field_benchmarks",
+            json.dumps({"mode": "daily_progress", "top_n": 3})
+        )
+        assert "Field Benchmarks: Daily Progress" in result
 
     def test_unknown_tool(self):
         from src.tools.tool_registry import execute_tool

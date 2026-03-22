@@ -14,6 +14,7 @@ from src.tools.issue_detection import identify_operational_issues
 from src.tools.formation_context import get_formation_context
 from src.tools.visualize import generate_depth_time_plot
 from src.tools.ddr_narrative import get_ddr_narrative
+from src.tools.field_benchmarks import get_field_benchmarks
 
 logger = logging.getLogger(__name__)
 
@@ -272,6 +273,55 @@ TOOL_DEFINITIONS = [
     {
         "type": "function",
         "function": {
+            "name": "get_field_benchmarks",
+            "description": (
+                "Return cleaned field-wide rankings and summaries for cross-well questions. "
+                "Prefer this over ad hoc SQL when the user asks 'across all wells', "
+                "'field-wide', 'highest/lowest', 'rank', 'benchmark', gas-response ranking, "
+                "risk ranking, or production summary. Modes: daily_progress, "
+                "section_performance, gas_response, risk, production_summary."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mode": {
+                        "type": "string",
+                        "description": (
+                            "Benchmark mode: daily_progress, section_performance, "
+                            "gas_response, risk, or production_summary"
+                        )
+                    },
+                    "wells": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Optional list of underscore-format wells to restrict the benchmark"
+                        )
+                    },
+                    "hole_size_in": {
+                        "type": "number",
+                        "description": (
+                            "Optional hole size filter in inches for section-based modes"
+                        )
+                    },
+                    "formation": {
+                        "type": "string",
+                        "description": (
+                            "Optional formation name for gas_response mode; defaults to Hugin"
+                        )
+                    },
+                    "top_n": {
+                        "type": "integer",
+                        "description": "How many top and bottom rows to show (default 5)"
+                    },
+                },
+                "required": ["mode"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "generate_depth_time_plot",
             "description": (
                 "Generate a depth-vs-time plot for a well's drilling campaign. "
@@ -362,6 +412,13 @@ TOOL_FUNCTIONS = {
     "get_formation_context": lambda args: get_formation_context(
         well=args["well"],
         depth_m=args.get("depth_m"),
+    ),
+    "get_field_benchmarks": lambda args: get_field_benchmarks(
+        mode=args["mode"],
+        wells=args.get("wells"),
+        hole_size_in=args.get("hole_size_in"),
+        formation=args.get("formation"),
+        top_n=args.get("top_n", 5),
     ),
     "generate_depth_time_plot": lambda args: generate_depth_time_plot(args["well"]),
     "get_ddr_narrative": lambda args: get_ddr_narrative(
