@@ -145,7 +145,7 @@ def slide_architecture(prs):
     _add_text(slide, Inches(0.8), Inches(0.35), Inches(11), Inches(0.7),
               "System Architecture", size=30, bold=True, color=NAVY)
     _add_text(slide, Inches(0.8), Inches(0.95), Inches(11), Inches(0.4),
-              "Pure OpenAI SDK + DuckDB + ChromaDB  |  No LangChain, no framework bloat",
+              "OpenAI SDK  +  DuckDB  +  ChromaDB",
               size=14, color=MED_GRAY)
     # Flow description
     _add_bullets(slide, Inches(0.8), Inches(1.6), Inches(5.5), Inches(5.5), [
@@ -266,22 +266,22 @@ def slide_evidence_design(prs):
     ], size=15)
 
     _add_text(slide, Inches(7.0), Inches(1.6), Inches(5.8), Inches(0.5),
-              "Key Differentiators", size=18, bold=True, color=TEAL)
+              "How Evidence is Gathered", size=18, bold=True, color=TEAL)
     _add_bullets(slide, Inches(7.0), Inches(2.2), Inches(5.8), Inches(4.5), [
-        "WITSML mudlog = actual measured ROP/WOB/RPM",
-        "  (not estimated from daily depth progress)",
+        "Structured data: WITSML mudlog provides actual",
+        "  measured ROP, WOB, RPM per depth interval",
         "",
-        "Hole-size transitions define phases",
-        "  (not just generic activity code classification)",
+        "Drilling phases: identified by hole-size",
+        "  transitions and validated against DDR text",
         "",
-        "Formation context links ROP to geology",
-        "  (why is this section slow? check the lithology)",
+        "Formation context: ROP variations correlated",
+        "  with lithology from mudlog + formation tops",
         "",
-        "Statistical mud-problem correlation",
-        "  (problem-day vs normal-day property comparison)",
+        "Mud-problem analysis: statistical comparison",
+        "  of mud properties on problem vs normal days",
         "",
-        "NPT sub-classified by comment analysis",
-        "  (11 categories instead of generic 'Other NPT')",
+        "NPT decomposition: 11 sub-categories derived",
+        "  from comment text analysis (not just activity codes)",
     ], size=13)
 
 
@@ -382,7 +382,7 @@ def slide_trace(prs):
     _add_text(slide, Inches(0.8), Inches(0.35), Inches(11), Inches(0.7),
               "Evidence Trace: Transparent Reasoning", size=30, bold=True, color=NAVY)
     _add_text(slide, Inches(0.8), Inches(0.95), Inches(11), Inches(0.4),
-              "python -m src.main ask '...' --trace   |   Turns the black box into a glass box",
+              "python -m src.main ask '...' --trace",
               size=14, color=MED_GRAY)
 
     _add_bullets(slide, Inches(0.8), Inches(1.7), Inches(11.5), Inches(5.0), [
@@ -401,8 +401,8 @@ def slide_trace(prs):
     ], size=14)
 
     _add_text(slide, Inches(0.8), Inches(5.8), Inches(11.5), Inches(1.0),
-              "Judges can see EXACTLY how the agent reasoned. Maximum transparency.",
-              size=16, bold=True, color=TEAL)
+              "Each tool call, its arguments, result size, and execution time are logged for full traceability.",
+              size=15, color=TEAL)
 
 
 def slide_design_decisions(prs):
@@ -412,38 +412,34 @@ def slide_design_decisions(prs):
     _add_text(slide, Inches(0.8), Inches(0.35), Inches(11), Inches(0.7),
               "Key Design Decisions", size=30, bold=True, color=NAVY)
     _add_text(slide, Inches(0.8), Inches(0.95), Inches(11), Inches(0.4),
-              '"Complexity alone will not be rewarded" -- Judges',
+              "Prioritizing simplicity, transparency, and reproducibility",
               size=14, color=MED_GRAY)
 
     _add_bullets(slide, Inches(0.8), Inches(1.6), Inches(5.5), Inches(5.5), [
-        "OpenAI SDK over LangChain",
-        "  Transparent, debuggable, minimal dependencies",
+        "Technology Choices",
+        "  OpenAI SDK: direct function calling, minimal abstraction",
+        "  DuckDB: in-process analytical SQL, zero configuration",
+        "  ChromaDB: embedded vector search, cosine similarity",
+        "  GPT-5.4 mini: reasoning_effort=high for domain questions",
         "",
-        "DuckDB over SQLite / Postgres",
-        "  In-process analytical SQL, zero config, fast",
-        "",
-        "ChromaDB for semantic retrieval",
-        "  Lightweight, embedded, cosine similarity",
-        "",
-        "GPT-5.4 mini configured for reasoning_effort=high",
-        "  Best reasoning quality for drilling domain",
-        "  Graceful runtime fallback when unsupported",
+        "Phase Detection Approach",
+        "  Rule-based: hole sizes + activity codes (deterministic)",
+        "  LLM: validates against DDR narratives, handles ambiguity",
+        "  Confidence: assessed per answer (HIGH / MEDIUM / LOW)",
     ], size=14)
 
     _add_bullets(slide, Inches(7.0), Inches(1.6), Inches(5.8), Inches(5.5), [
-        "Rule-based + LLM hybrid for phase detection",
-        "  Rules: hole sizes + activity codes (deterministic)",
-        "  LLM: validates against DDR narratives",
+        "Tool Design Philosophy",
+        "  Each tool built for a specific question category",
+        "  Tools return structured evidence with source attribution",
+        "  12 tools covering all 6 evaluation categories",
         "",
-        "Domain-specific tooling over generic agents",
-        "  Each tool purpose-built for a question category",
-        "  Tools return structured evidence, not raw data",
-        "",
-        "Quality assurance",
-        "  95 automated tests, 130-question primary stress test",
-        "  Baseline avg 7.59/10 -> 8.02/10 after fixes",
-        "  Output validation checks all 6 answer sections",
-        "  Data quality filtering at ingestion + query time",
+        "Quality Assurance",
+        "  95 automated unit tests (parsers, tools, formatting)",
+        "  130-question stress test across diverse wells & categories",
+        "  Output validation checks all 6 required answer sections",
+        "  Data quality filtering at ingestion and query time",
+        "  Sentinel value handling, outlier removal, unit conversions",
     ], size=14)
 
 
@@ -454,30 +450,43 @@ def slide_summary(prs):
     bg.fill.solid()
     bg.fill.fore_color.rgb = NAVY
     bg.line.fill.background()
-    _accent_bar(slide, y=Inches(3.0), height=Inches(0.04), color=GOLD)
+    _accent_bar(slide, y=Inches(3.4), height=Inches(0.04), color=GOLD)
 
-    _add_text(slide, Inches(1.2), Inches(0.6), Inches(11), Inches(0.8),
-              "Why This Solution Wins", size=36, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
+    _add_text(slide, Inches(1.2), Inches(0.5), Inches(11), Inches(0.8),
+              "Summary & How to Run", size=36, bold=True, color=WHITE, align=PP_ALIGN.CENTER)
 
-    _add_bullets(slide, Inches(1.5), Inches(1.6), Inches(10.3), Inches(1.2), [
-        "12 DuckDB tables from 4 data sources (DDR + WITSML + production + geology)",
-        "12 purpose-built agent tools covering all 6 question categories + cross-well benchmarks",
-        "~38,000 searchable documents in ChromaDB vector store (DDR text + WITSML messages)",
-    ], size=16, color=RGBColor(0xCC, 0xDD, 0xEE), indent_color=RGBColor(0x99, 0xBB, 0xDD))
+    _add_bullets(slide, Inches(1.5), Inches(1.4), Inches(5.0), Inches(1.8), [
+        "System at a Glance",
+        "  12 DuckDB tables from 4 data sources",
+        "  12 agent tools covering all 6 question categories",
+        "  36,709 searchable documents in ChromaDB",
+        "  95 unit tests + 130-question stress test",
+    ], size=15, color=RGBColor(0xCC, 0xDD, 0xEE), indent_size=13,
+       indent_color=RGBColor(0x99, 0xBB, 0xDD))
 
-    _add_bullets(slide, Inches(1.5), Inches(3.3), Inches(10.3), Inches(3.5), [
-        "Evidence-first: every answer cites BOTH data AND daily report quotes",
-        "Transparent: --trace shows complete reasoning chain for every answer",
-        "Domain-appropriate: hole-size phase detection, NPT sub-classification, mud correlation",
-        "Deep data integration: actual measured ROP/WOB/RPM from WITSML mudlog",
-        "Cross-well analysis: field-wide benchmarks, difficulty indices, gas response ranking",
-        "Robust: 95 tests, 130-question stress test, +0.43 after targeted fixes",
-        "Reproducible: pip install, set API key, ingest (~3 min), ask questions",
-    ], size=15, color=WHITE, indent_color=RGBColor(0xBB, 0xCC, 0xDD))
+    _add_bullets(slide, Inches(7.0), Inches(1.4), Inches(5.5), Inches(1.8), [
+        "Answer Format (every response)",
+        "  Structured data evidence with measurements",
+        "  Direct DDR quotes with well name and date",
+        "  Step-by-step reasoning chain",
+        "  Explicit assumptions and confidence level",
+    ], size=15, color=RGBColor(0xCC, 0xDD, 0xEE), indent_size=13,
+       indent_color=RGBColor(0x99, 0xBB, 0xDD))
+
+    _add_text(slide, Inches(1.5), Inches(3.7), Inches(10.3), Inches(0.5),
+              "Quick Start (3 commands)", size=20, bold=True, color=WHITE)
+
+    _add_bullets(slide, Inches(1.5), Inches(4.3), Inches(10.3), Inches(2.5), [
+        "pip install -r requirements.txt",
+        "python -m src.main ingest                         # ~3 minutes",
+        'python -m src.main ask "your question"            # structured answer',
+        'python -m src.main ask "your question" --trace    # with evidence trace',
+        "python -m src.main demo --save                    # all 6 demo questions",
+    ], size=15, color=RGBColor(0xBB, 0xDD, 0xBB), indent_color=RGBColor(0x99, 0xBB, 0x99))
 
     _add_text(slide, Inches(1.2), Inches(6.5), Inches(11), Inches(0.6),
-              "Clean, minimal, readable code  |  No LangChain, no framework bloat",
-              size=16, color=GOLD, align=PP_ALIGN.CENTER)
+              "OPENAI_API_KEY required  |  Python 3.10+  |  Volve dataset in .googledrive/",
+              size=14, color=MED_GRAY, align=PP_ALIGN.CENTER)
 
 
 def create_presentation():
