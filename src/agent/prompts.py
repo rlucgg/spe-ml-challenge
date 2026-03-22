@@ -62,36 +62,38 @@ Key wells with rich WITSML data: 15_9_F_11_T2, 15_9_F_11_B, 15_9_F_11_A, 15_9_F_
 
 ## Tool Selection Guide
 
+**EVERY question type — ALWAYS end with this step:**
+- `get_ddr_narrative(well, date_from, date_to)` — retrieve DDR text for the key dates/depths from your analysis to get direct quotes for Evidence from Daily Reports
+
 **For Phase Identification questions (Category 1):**
 1. `get_drilling_phases(well)` — automated phase detection with hole section boundaries
-2. `query_drilling_data` — hole sizes over time: `SELECT date, md_m, hole_diameter_in FROM ddr_status WHERE well = '...' ORDER BY date`
-3. `search_daily_reports` — find phase transitions: "casing cemented", "started drilling", "reached TD"
+2. `query_drilling_data` — hole sizes over time
+3. `get_ddr_narrative(well, date_from, date_to)` — get DDR quotes for each phase transition date
 
 **For Efficiency/NPT questions (Category 2):**
 1. `compute_efficiency_metrics(well)` — NPT breakdown, productive time ratio, ROP by section
-2. `search_daily_reports` — find NPT narratives: "waiting on weather", "repair", "equipment failure"
-3. `query_drilling_data` — activity duration analysis from ddr_activities
+2. `get_ddr_narrative(well)` — get DDR summaries covering the drilling period for NPT evidence
+3. `search_daily_reports` — find specific NPT narratives: "waiting on weather", "repair"
 
 **For Section/ROP Performance questions (Category 3):**
-1. `query_drilling_data` — mudlog ROP data: `SELECT md_top_m, md_bottom_m, lith_type, rop_avg_m_per_hr FROM witsml_mudlog WHERE well = '...'`
+1. `query_drilling_data` — mudlog ROP data from witsml_mudlog
 2. `get_bha_configurations(well)` — ROP by hole section with drilling parameters
-3. `get_formation_context(well, depth)` — geological context for ROP variations
+3. `get_ddr_narrative(well, depth_from=X, depth_to=Y)` — DDR text for the section being analyzed
 
 **For BHA/Configuration questions (Category 4):**
 1. `get_bha_configurations(well)` — official BHA runs, drilling params, performance ranking
 2. `query_drilling_data` — detailed mudlog analysis for specific depth ranges
-3. `search_daily_reports` — BHA change narratives, bit condition reports
+3. `get_ddr_narrative(well, date_from, date_to)` — DDR quotes for the dates of key BHA runs
 
 **For Operational Issues questions (Category 5):**
 1. `identify_operational_issues(well)` — categorized issues with root causes
-2. `search_daily_reports` — issue details: "stuck", "loss", "kick", "failure"
+2. `get_ddr_narrative(well, date_from, date_to)` — DDR text for the dates when issues occurred
 3. `query_drilling_data` — correlate with fluid properties, depth context
 
 **For Comparison/Synthesis questions (Category 6):**
 1. `compare_wells(well1, well2)` — side-by-side metrics
 2. `compute_efficiency_metrics` for each well
-3. `get_drilling_phases` for each well
-4. `search_daily_reports` — key events from both wells
+3. `get_ddr_narrative` for each well — get representative DDR quotes from both
 
 ## MANDATORY Output Format
 
@@ -121,7 +123,12 @@ For EVERY conclusion, you MUST cite:
 1. At least one specific measurement from structured data (depth, ROP, duration, count)
 2. At least one direct quote from a DDR report with well name and date
 
-If you cannot find both types of evidence, explicitly state what is missing and how it affects your confidence level.
+**How to ALWAYS find DDR quotes:**
+After getting structured results (e.g., ROP data, phase boundaries, efficiency metrics), use `get_ddr_narrative` with the DATES and DEPTHS from those results to retrieve the corresponding daily report text. For example:
+- If the best ROP was at 1400-2574m during April 11-21, call: `get_ddr_narrative(well="15_9_F_11_T2", date_from="2013-04-11", date_to="2013-04-21")`
+- If an equipment issue occurred on 2013-03-25, call: `get_ddr_narrative(well="15_9_F_11_T2", date_from="2013-03-25", date_to="2013-03-26")`
+
+This tool queries by date/depth and ALWAYS returns DDR text — use it to fill the "Evidence from Daily Reports" section. Do NOT skip this step.
 
 ## Confidence Calibration
 

@@ -96,7 +96,20 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     import os
     if os.getenv("OPENAI_API_KEY"):
         from src.ingest.build_vectorstore import build_vectorstore
-        doc_count = build_vectorstore(parsed_ddrs["text_docs"])
+        # Combine DDR text docs with WITSML messages for richer search
+        all_text_docs = list(parsed_ddrs["text_docs"])
+        if parsed_witsml and parsed_witsml.get("messages"):
+            for msg in parsed_witsml["messages"]:
+                if msg.get("message_text") and len(msg["message_text"]) > 5:
+                    all_text_docs.append({
+                        "well": msg["well"],
+                        "date": msg["timestamp"][:10] if msg.get("timestamp") else "",
+                        "depth_m": msg.get("md_m"),
+                        "doc_type": "witsml_message",
+                        "activity_code": msg.get("message_type", ""),
+                        "text": msg["message_text"],
+                    })
+        doc_count = build_vectorstore(all_text_docs)
         logger.info("Vector store built with %d documents", doc_count)
     else:
         logger.warning(

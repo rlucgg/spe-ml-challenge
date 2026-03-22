@@ -170,6 +170,44 @@ class TestBhaAnalysis:
         assert "No WITSML" in result or "No activity" in result
 
 
+class TestDdrNarrative:
+    """Test the DDR narrative retrieval tool."""
+
+    def test_returns_narrative(self):
+        from src.tools.ddr_narrative import get_ddr_narrative
+        result = get_ddr_narrative("15_9_F_11_T2")
+        assert "DDR Narrative" in result
+        assert "DAILY SUMMARIES" in result
+
+    def test_date_filtered(self):
+        from src.tools.ddr_narrative import get_ddr_narrative
+        result = get_ddr_narrative(
+            "15_9_F_11_T2", date_from="2013-04-14", date_to="2013-04-16"
+        )
+        assert "2013-04-1" in result
+        assert "DDR" in result
+
+    def test_depth_filtered(self):
+        from src.tools.ddr_narrative import get_ddr_narrative
+        result = get_ddr_narrative(
+            "15_9_F_11_T2", depth_from=1000, depth_to=2000
+        )
+        assert "DDR Narrative" in result
+
+    def test_always_returns_text(self):
+        """Core requirement: this tool must always return DDR text for valid wells."""
+        from src.tools.ddr_narrative import get_ddr_narrative
+        result = get_ddr_narrative("15_9_F_11_T2")
+        assert "Summary:" in result or "summary" in result.lower()
+        # Must contain actual quoted text
+        assert '"' in result
+
+    def test_empty_well(self):
+        from src.tools.ddr_narrative import get_ddr_narrative
+        result = get_ddr_narrative("NONEXISTENT")
+        assert "No DDR narrative" in result
+
+
 class TestFormationContext:
     """Test the formation context tool."""
 
@@ -223,7 +261,7 @@ class TestToolRegistry:
 
     def test_tool_count(self):
         from src.tools.tool_registry import TOOL_DEFINITIONS
-        assert len(TOOL_DEFINITIONS) == 10  # 8 original + formation_context + visualize
+        assert len(TOOL_DEFINITIONS) == 11  # 9 + visualize + ddr_narrative
 
     def test_execute_tool(self):
         from src.tools.tool_registry import execute_tool

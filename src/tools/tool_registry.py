@@ -13,6 +13,7 @@ from src.tools.bha_analysis import get_bha_configurations
 from src.tools.issue_detection import identify_operational_issues
 from src.tools.formation_context import get_formation_context
 from src.tools.visualize import generate_depth_time_plot
+from src.tools.ddr_narrative import get_ddr_narrative
 
 logger = logging.getLogger(__name__)
 
@@ -289,6 +290,45 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_ddr_narrative",
+            "description": (
+                "Retrieve DDR daily summaries, forecasts, and activity comments for a "
+                "specific date or depth range. Unlike semantic search, this ALWAYS returns "
+                "text if the well has DDR data in that range. Use this to get direct quotes "
+                "for the 'Evidence from Daily Reports' section. Also returns WITSML operational "
+                "messages if available."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "well": {
+                        "type": "string",
+                        "description": "Well name (underscore format)"
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)"
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)"
+                    },
+                    "depth_from": {
+                        "type": "number",
+                        "description": "Minimum depth in meters"
+                    },
+                    "depth_to": {
+                        "type": "number",
+                        "description": "Maximum depth in meters"
+                    },
+                },
+                "required": ["well"],
+            },
+        },
+    },
 ]
 
 # Dispatch map: function name -> callable
@@ -324,6 +364,13 @@ TOOL_FUNCTIONS = {
         depth_m=args.get("depth_m"),
     ),
     "generate_depth_time_plot": lambda args: generate_depth_time_plot(args["well"]),
+    "get_ddr_narrative": lambda args: get_ddr_narrative(
+        well=args["well"],
+        date_from=args.get("date_from"),
+        date_to=args.get("date_to"),
+        depth_from=args.get("depth_from"),
+        depth_to=args.get("depth_to"),
+    ),
 }
 
 
