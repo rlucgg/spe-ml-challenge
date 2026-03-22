@@ -38,7 +38,12 @@ def get_bha_configurations(well: str) -> str:
         ORDER BY start_time
     """, [like]).fetchall()
 
-    # 2. Get mudlog drilling parameters
+    # 2. Get mudlog drilling parameters (with quality filters for realistic values)
+    mudlog_raw_count = con.execute("""
+        SELECT COUNT(*) FROM witsml_mudlog WHERE well LIKE ?
+          AND rop_avg_m_per_hr IS NOT NULL
+    """, [like]).fetchone()[0]
+
     mudlog = con.execute("""
         SELECT md_top_m, md_bottom_m, lith_type, lith_pct,
                rop_avg_m_per_hr, wob_avg_kN, torque_avg_kNm, rpm_avg,
@@ -46,9 +51,14 @@ def get_bha_configurations(well: str) -> str:
         FROM witsml_mudlog
         WHERE well LIKE ?
           AND rop_avg_m_per_hr IS NOT NULL
-          AND rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr < 500
+          AND (rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr <= 200)
+          AND (rpm_avg IS NULL OR (rpm_avg > 0 AND rpm_avg <= 300))
+          AND (wob_avg_kN IS NULL OR (wob_avg_kN > 0 AND wob_avg_kN <= 500))
+          AND (torque_avg_kNm IS NULL OR (torque_avg_kNm > 0 AND torque_avg_kNm <= 100))
         ORDER BY md_top_m
     """, [like]).fetchall()
+
+    mudlog_filtered = mudlog_raw_count - len(mudlog)
 
     # 3. Get DDR depth progression and hole sizes
     ddr_status = con.execute("""
@@ -100,7 +110,10 @@ def get_bha_configurations(well: str) -> str:
 
     # --- Section B: Drilling Parameters from MudLog ---
     if mudlog:
-        lines.append(f"\nDrilling Parameters (from WITSML MudLog): {len(mudlog)} depth intervals\n")
+        quality_note = ""
+        if mudlog_filtered > 0:
+            quality_note = f" ({mudlog_filtered} outlier readings filtered)"
+        lines.append(f"\nDrilling Parameters (from WITSML MudLog): {len(mudlog)} depth intervals{quality_note}\n")
 
         # Group by hole section using DDR hole sizes
         hole_map = {}
@@ -214,6 +227,15 @@ def get_bha_configurations(well: str) -> str:
                     avg = total / n_days if n_days else 0
                     lines.append(f"  {hole}\" hole: {n_days} days, {total:.0f}m drilled, avg {avg:.1f} m/day")
 
+        # Also extract BHA mentions from DDR comments
+        lines.append("\nBHA References from DDR Comments:")
+        bha_kw_comments = con_fallback_comments if 'con_fallback_comments' in dir() else []
+        if not bha_kw_comments and bha_comments:
+            for bc in bha_comments[:10]:
+                depth = f"{bc[1]:.0f}m" if bc[1] else "?"
+                comment = (bc[3] or "")[:180]
+                lines.append(f"  {bc[0]} @ {depth}: \"{comment}\"")
+
     # --- Section D: DDR Evidence ---
     if bha_comments:
         lines.append(f"\nDDR Report Evidence ({len(bha_comments)} BHA-related entries):")
@@ -221,5 +243,14 @@ def get_bha_configurations(well: str) -> str:
             depth = f"{bc[1]:.0f}m" if bc[1] else "?"
             comment = (bc[3] or "")[:180]
             lines.append(f"  {bc[0]} @ {depth}: \"{comment}\"")
+
+    # --- Data Source Quality ---
+    lines.append("\nData Source Quality:")
+    if bha_runs and mudlog:
+        lines.append(f"  WITSML data: {len(bha_runs)} BHA runs, {len(mudlog)} mudlog intervals — HIGH confidence")
+    elif bha_runs:
+        lines.append(f"  WITSML BHA runs: {len(bha_runs)} — MEDIUM confidence (no mudlog data)")
+    else:
+        lines.append("  DDR-derived estimates only — LOWER confidence (no WITSML real-time data)")
 
     return "\n".join(lines)

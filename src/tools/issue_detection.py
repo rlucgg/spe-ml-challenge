@@ -87,14 +87,22 @@ def identify_operational_issues(
         WHERE well LIKE ? ORDER BY md_m
     """, [like]).fetchall()
 
-    # WITSML mudlog for drilling parameter context
+    # WITSML mudlog for drilling parameter context (quality-filtered)
     mudlog_stats = con.execute("""
         SELECT md_top_m, md_bottom_m, rop_avg_m_per_hr, wob_avg_kN, lith_type
         FROM witsml_mudlog
         WHERE well LIKE ? AND rop_avg_m_per_hr IS NOT NULL
-          AND rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr < 500
+          AND (rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr <= 200)
+          AND (rpm_avg IS NULL OR (rpm_avg > 0 AND rpm_avg <= 300))
+          AND (wob_avg_kN IS NULL OR (wob_avg_kN > 0 AND wob_avg_kN <= 500))
         ORDER BY md_top_m
     """, [like]).fetchall()
+
+    # ALL fluid records for statistical comparison (not just problem days)
+    all_fq = "SELECT date, density_gcc, pv_mPas, yp_Pa FROM ddr_fluids WHERE well LIKE ?"
+    all_fp = [like]
+    all_fq, all_fp = _df(all_fq, all_fp)
+    all_fluids = con.execute(all_fq, all_fp).fetchall()
 
     # Problem summaries
     sq = """
@@ -225,7 +233,8 @@ def identify_operational_issues(
             if hole_info and hole_info["hole_in"]:
                 event_holes.add(hole_info["hole_in"])
         if event_holes:
-            lines.append(f"    Hole sections affected: {', '.join(f'{h}\"' for h in sorted(event_holes))}")
+            holes_str = ", ".join(str(h) + '"' for h in sorted(event_holes))
+            lines.append(f"    Hole sections affected: {holes_str}")
 
         # Formation correlation
         formations = set()
@@ -280,6 +289,35 @@ def identify_operational_issues(
             lines.append("  Trend: Issues DECREASING over time")
         else:
             lines.append("  Trend: Issues roughly STABLE over time")
+
+    # --- Statistical Mud Property Analysis ---
+    problem_dates = {it["date"] for it in issue_timeline}
+    all_dates = {f[0] for f in all_fluids}
+    normal_dates = all_dates - problem_dates
+
+    if all_fluids and problem_dates:
+        lines.append("\nSTATISTICAL MUD PROPERTY ANALYSIS:")
+
+        def _stat_compare(name, unit, get_val):
+            prob_vals = [get_val(f) for f in all_fluids if f[0] in problem_dates and get_val(f)]
+            norm_vals = [get_val(f) for f in all_fluids if f[0] in normal_dates and get_val(f)]
+            if prob_vals and norm_vals:
+                avg_p = sum(prob_vals) / len(prob_vals)
+                avg_n = sum(norm_vals) / len(norm_vals)
+                diff_pct = ((avg_p - avg_n) / avg_n) * 100 if avg_n else 0
+                lines.append(f"  Avg {name} on problem days: {avg_p:.3f} {unit} (n={len(prob_vals)})")
+                lines.append(f"  Avg {name} on normal days:  {avg_n:.3f} {unit} (n={len(norm_vals)})")
+                lines.append(f"  Difference: {diff_pct:+.1f}%")
+                if abs(diff_pct) > 5:
+                    direction = "higher" if diff_pct > 0 else "lower"
+                    lines.append(f"  -> Notable: {name} was {direction} on problem days, suggesting possible correlation")
+                else:
+                    lines.append(f"  -> {name} was similar on problem vs. normal days — likely NOT a contributing factor")
+                lines.append("")
+
+        _stat_compare("mud weight", "g/cm3", lambda f: f[1])
+        _stat_compare("PV", "mPa.s", lambda f: f[2])
+        _stat_compare("YP", "Pa", lambda f: f[3])
 
     # --- Issue Timeline ---
     lines.append("\nIssue Timeline (chronological):")
