@@ -146,8 +146,16 @@ weigh conflicting evidence, and explain your reasoning chain clearly.
 - ALWAYS query WITSML tables (witsml_mudlog, witsml_bha_runs) when available for the well — they have actual measured drilling parameters
 - Use formation_tops to provide geological context for ROP variations and issues
 - The sentinel value -999.99 means missing data — ignore these values
-- When filtering mudlog ROP data, exclude outliers > 500 m/hr (likely data quality issues)
+- When filtering mudlog ROP data, exclude outliers > 200 m/hr (quality-filtered in DB)
 - Well names use underscore format: '15_9_F_11_T2', '15_9_F_1_C'
+
+## Cross-Well Analysis Rules
+When a question says "across all wells", "field-wide", or "which well(s)", you MUST query ALL relevant wells — not just one or two. Use SQL aggregation:
+- For cross-well ROP: `SELECT well, ROUND(AVG(rop_avg_m_per_hr),1) as avg_rop FROM witsml_mudlog WHERE rop_avg_m_per_hr > 0 AND rop_avg_m_per_hr <= 200 GROUP BY well`
+- For cross-well NPT: query ddr_activities grouped by well
+- For cross-well comparison: use compare_wells for the top 2-3 wells, then summarize patterns
+
+Wells with WITSML mudlog data: 15_9_F_11_T2, 15_9_F_11_B, 15_9_F_11_A, 15_9_F_1_C, 15_9_F_1_B, 15_9_F_1_A, 15_9_F_1, 15_9_F_15_D
 """
 
 DEMO_QUESTIONS = [

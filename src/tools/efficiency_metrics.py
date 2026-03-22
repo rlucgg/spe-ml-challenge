@@ -15,10 +15,33 @@ NPT_CODES = {
     "interruption -- waiting on weather": "Weather",
     "interruption -- waiting": "Waiting",
     "interruption -- other": "Other NPT",
+    "interruption -- wait": "Waiting",
+    "interruption -- maintain": "Maintenance",
     "well_control -- kick": "Well Control",
     "well_control -- kill": "Well Control",
     "well_control -- shut-in": "Well Control",
 }
+
+# Sub-classify "interruption -- other" using comment keywords
+_NPT_COMMENT_RULES = [
+    (["cement", "waiting on cement", "woc"], "Waiting on Cement"),
+    (["mwd", "lwd", "tool", "sensor", "probe", "signal"], "MWD/Tool Issue"),
+    (["survey", "gyro"], "Survey Operations"),
+    (["rig up", "rig down", "rigged", "r/u", "r/d", "nipple"], "Rig Up/Down"),
+    (["circul", "displace", "sweep", "condition"], "Circulating/Conditioning"),
+    (["crew", "safety", "meeting", "drill", "hse"], "Crew/Safety/Meeting"),
+    (["slip", "cut", "drill line"], "Slip & Cut Drill Line"),
+    (["test", "pressure test", "fit", "lot", "leak"], "Pressure Testing"),
+]
+
+
+def _sub_classify_npt(comments: str) -> str:
+    """Sub-classify 'Other NPT' using keywords in the activity comments."""
+    cl = comments.lower()
+    for keywords, label in _NPT_COMMENT_RULES:
+        if any(kw in cl for kw in keywords):
+            return label
+    return "Other NPT (unclassified)"
 
 PRODUCTIVE_CODES = {
     "drilling -- drill": "Drilling",
@@ -105,6 +128,7 @@ def compute_efficiency_metrics(
     npt_breakdown = {}
     productive_breakdown = {}
     problem_count = 0
+    longest_npt_event = {"cause": "", "hrs": 0.0, "date": "", "comment": ""}
 
     for act in activities:
         code = (act[4] or "").lower().strip()
@@ -128,7 +152,16 @@ def compute_efficiency_metrics(
         if code in NPT_CODES:
             npt_hrs += duration_hrs
             cause = NPT_CODES[code]
+            # Sub-classify generic "Other NPT" using comment text
+            if cause == "Other NPT":
+                comments = act[7] or ""
+                cause = _sub_classify_npt(comments)
             npt_breakdown[cause] = npt_breakdown.get(cause, 0) + duration_hrs
+            if duration_hrs > longest_npt_event["hrs"]:
+                longest_npt_event = {
+                    "cause": cause, "hrs": duration_hrs,
+                    "date": act[0], "comment": (act[7] or "")[:120],
+                }
         elif code in PRODUCTIVE_CODES:
             productive_hrs += duration_hrs
             kind = PRODUCTIVE_CODES[code]
@@ -167,6 +200,11 @@ def compute_efficiency_metrics(
         lines.append("\nNPT Breakdown:")
         for cause, hrs in sorted(npt_breakdown.items(), key=lambda x: -x[1]):
             lines.append(f"  {cause}: {hrs:.1f} hrs")
+        if longest_npt_event["hrs"] > 0:
+            lines.append(f"\n  Longest single NPT event: {longest_npt_event['hrs']:.1f} hrs"
+                         f" ({longest_npt_event['cause']}) on {longest_npt_event['date']}")
+            if longest_npt_event["comment"]:
+                lines.append(f"    \"{longest_npt_event['comment']}\"")
 
     # Productive time breakdown
     if productive_breakdown:

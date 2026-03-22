@@ -209,28 +209,43 @@ def get_bha_configurations(well: str) -> str:
                 )
     else:
         lines.append("\nNo WITSML mudlog data available. Using DDR-based analysis.")
-        # Fallback: DDR-based hole section performance
+        # Fallback: DDR-based hole section performance with estimated ROP
         if ddr_status:
             by_hole = {}
             for d in ddr_status:
                 h = d[2]
                 if h and d[3] and d[3] > 0:
                     if h not in by_hole:
-                        by_hole[h] = {"dists": [], "dates": []}
+                        by_hole[h] = {"dists": [], "dates": [], "md_min": d[1], "md_max": d[1]}
                     by_hole[h]["dists"].append(d[3])
                     by_hole[h]["dates"].append(d[0])
+                    if d[1] and d[1] < by_hole[h]["md_min"]:
+                        by_hole[h]["md_min"] = d[1]
+                    if d[1] and d[1] > by_hole[h]["md_max"]:
+                        by_hole[h]["md_max"] = d[1]
             if by_hole:
-                lines.append("\nPerformance by Hole Section (DDR daily progress):")
-                for hole, info in sorted(by_hole.items(), key=lambda x: x[0], reverse=True):
+                lines.append("\nPerformance by Hole Section (DDR daily progress — estimated):")
+                ranked = []
+                for hole, info in sorted(by_hole.items(), key=lambda x: x[1].get("md_min", 0)):
                     n_days = len(info["dates"])
                     total = sum(info["dists"])
                     avg = total / n_days if n_days else 0
-                    lines.append(f"  {hole}\" hole: {n_days} days, {total:.0f}m drilled, avg {avg:.1f} m/day")
+                    md_range = f"{info['md_min']:.0f}-{info['md_max']:.0f}m"
+                    lines.append(
+                        f"  {hole}\" hole: {md_range} | {n_days} days, "
+                        f"{total:.0f}m drilled, avg {avg:.1f} m/day"
+                    )
+                    ranked.append((hole, avg, md_range))
 
-        # Also extract BHA mentions from DDR comments
-        lines.append("\nBHA References from DDR Comments:")
-        bha_kw_comments = con_fallback_comments if 'con_fallback_comments' in dir() else []
-        if not bha_kw_comments and bha_comments:
+                if len(ranked) > 1:
+                    best = max(ranked, key=lambda x: x[1])
+                    worst = min(ranked, key=lambda x: x[1])
+                    lines.append(f"\n  Best section: {best[0]}\" ({best[2]}) at {best[1]:.1f} m/day")
+                    lines.append(f"  Slowest section: {worst[0]}\" ({worst[2]}) at {worst[1]:.1f} m/day")
+
+        # Extract BHA mentions from DDR comments
+        if bha_comments:
+            lines.append(f"\nBHA References from DDR Comments ({len(bha_comments)} mentions):")
             for bc in bha_comments[:10]:
                 depth = f"{bc[1]:.0f}m" if bc[1] else "?"
                 comment = (bc[3] or "")[:180]

@@ -45,7 +45,7 @@ def identify_operational_issues(
             p.append(date_to)
         return q, p
 
-    # Get problem activities
+    # Get problem activities (expanded: codes + state + comment-based well control)
     iq = """
         SELECT date, start_time, end_time, depth_m, activity_code,
                state, state_detail, comments
@@ -54,7 +54,13 @@ def identify_operational_issues(
           AND (state = 'problem'
                OR activity_code LIKE 'interruption%'
                OR activity_code LIKE 'well_control%'
-               OR state_detail IN ('equipment failure', 'mud loss', 'operation failed'))
+               OR state_detail IN ('equipment failure', 'mud loss', 'operation failed')
+               OR LOWER(comments) LIKE '%kick%'
+               OR LOWER(comments) LIKE '%influx%'
+               OR LOWER(comments) LIKE '%shut in%'
+               OR LOWER(comments) LIKE '%well control%'
+               OR LOWER(comments) LIKE '%flow check%'
+               OR LOWER(comments) LIKE '%blowout%')
     """
     ip = [like]
     iq, ip = _df(iq, ip)
@@ -169,7 +175,9 @@ def identify_operational_issues(
         detail = iss[6] or ""
         comments = iss[7] or ""
 
-        if "well_control" in code:
+        comments_lower = comments.lower()
+        if "well_control" in code or any(kw in comments_lower for kw in
+                ["kick", "influx", "well control", "blowout", "shut in well"]):
             cat = "Well Control"
         elif "repair" in code or "maintain" in code.lower():
             cat = "Equipment Repair"
@@ -177,8 +185,12 @@ def identify_operational_issues(
             cat = "Weather Delay" if "weather" in code else "Waiting/Delay"
         elif "equipment failure" in detail:
             cat = "Equipment Failure"
-        elif "mud loss" in detail:
+        elif "mud loss" in detail or "loss" in comments_lower and "circulat" in comments_lower:
             cat = "Mud Losses"
+        elif "stuck" in comments_lower:
+            cat = "Stuck Pipe"
+        elif "flow check" in comments_lower:
+            cat = "Flow Check"
         elif "operation failed" in detail:
             cat = "Operational Difficulty"
         else:
