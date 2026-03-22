@@ -11,7 +11,7 @@ from pathlib import Path
 
 from src.agent.orchestrator import ask_question
 from src.agent.output_formatter import validate_answer
-from src.analysis.stress_test_questions import QUESTIONS
+from src.analysis.stress_test_questions_set_b import QUESTIONS
 
 
 def _build_markdown(results: list[dict], label: str) -> str:
