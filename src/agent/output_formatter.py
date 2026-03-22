@@ -33,11 +33,12 @@ def validate_answer(answer: str) -> dict:
         answer
     ))
 
-    # Check for a DDR quote with date attribution
+    # Check for a DDR quote with date attribution (handles bold markdown format)
     has_ddr_quote = bool(re.search(
-        r"(?:DDR|report|daily)\s.*?\d{4}[-/]\d{2}[-/]\d{2}",
-        answer, re.IGNORECASE
-    )) or bool(re.search(r'"\s*[A-Z].*?"', answer))
+        r"DDR.*?(?:15[/_]9|F-\d).*?\d{4}", answer, re.IGNORECASE
+    )) or bool(re.search(
+        r"(?:DDR|report|daily)\s.*?\d{4}[-/]\d{2}[-/]\d{2}", answer, re.IGNORECASE
+    )) or bool(re.search(r'"\*?\*?[A-Z].*?\*?\*?"', answer))
 
     if missing:
         warnings.append(f"Missing sections: {', '.join(missing)}")
