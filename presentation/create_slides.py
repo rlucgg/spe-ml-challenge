@@ -425,9 +425,9 @@ def slide_design_decisions(prs):
         "ChromaDB for semantic retrieval",
         "  Lightweight, embedded, cosine similarity",
         "",
-        "GPT-5.4 mini with reasoning_effort=high",
+        "GPT-5.4 mini configured for reasoning_effort=high",
         "  Best reasoning quality for drilling domain",
-        "  Graceful fallback for older models",
+        "  Graceful runtime fallback when unsupported",
     ], size=14)
 
     _add_bullets(slide, Inches(7.0), Inches(1.6), Inches(5.8), Inches(5.5), [
@@ -440,7 +440,8 @@ def slide_design_decisions(prs):
         "  Tools return structured evidence, not raw data",
         "",
         "Quality assurance",
-        "  95 automated tests, 130 stress-test questions",
+        "  95 automated tests, 50-question primary stress test",
+        "  Baseline avg 7.59/10 -> 8.02/10 after fixes",
         "  Output validation checks all 6 answer sections",
         "  Data quality filtering at ingestion + query time",
     ], size=14)
@@ -470,7 +471,7 @@ def slide_summary(prs):
         "Domain-appropriate: hole-size phase detection, NPT sub-classification, mud correlation",
         "Deep data integration: actual measured ROP/WOB/RPM from WITSML mudlog",
         "Cross-well analysis: field-wide benchmarks, difficulty indices, gas response ranking",
-        "Robust: 95 tests, 130 stress questions, data quality filtering, API retry logic",
+        "Robust: 95 tests, 50-question stress test, +0.43 after targeted fixes",
         "Reproducible: pip install, set API key, ingest (~3 min), ask questions",
     ], size=15, color=WHITE, indent_color=RGBColor(0xBB, 0xCC, 0xDD))
 

@@ -43,7 +43,7 @@ python -m src.main ingest
 
 This parses all data sources into:
 - **DuckDB** database (`data/processed/volve.duckdb`) — 12 tables for structured queries
-- **ChromaDB** vector store (`data/processed/vectorstore/`) — 26,965 documents for semantic search
+- **ChromaDB** vector store (`data/processed/vectorstore/`) — 36,709 searchable documents (DDR text + WITSML messages)
 
 ### 5. Ask Questions
 
@@ -74,13 +74,13 @@ User Question
 GPT-5.4 mini Agent (tool calling, max 10 rounds, retry with backoff)
      |
      |-- query_drilling_data       SQL on 12 DuckDB tables
-     |-- search_daily_reports      Semantic search on 26,965 ChromaDB docs
+     |-- search_daily_reports      Semantic search on 36,709 ChromaDB docs
      |-- get_well_overview         Well metadata, sections, formations
      |-- get_drilling_phases       Hole-size + activity-code phase detection
-     |-- compute_efficiency        NPT breakdown, ROP by section
+     |-- compute_efficiency_metrics NPT breakdown, ROP by section
      |-- compare_wells             Side-by-side well comparison
      |-- get_bha_configurations    WITSML BHA runs + mudlog drilling params
-     |-- identify_issues           Problem detection + root cause correlation
+     |-- identify_operational_issues Problem detection + root cause correlation
      |-- get_formation_context     Geological context for any depth
      |-- get_field_benchmarks      Cross-well rankings and field-wide analysis
      |-- get_ddr_narrative         Guaranteed DDR text retrieval by date/depth
@@ -126,9 +126,9 @@ python presentation/create_slides.py
 
 ## Technology
 
-- **LLM**: OpenAI GPT-5.4 mini with extended reasoning (configurable via `OPENAI_MODEL` env var, falls back to GPT-4o if set)
-- **Reasoning**: `reasoning_effort=high` for deep drilling domain analysis (configurable via `REASONING_EFFORT` env var)
-- **Vector Store**: ChromaDB with OpenAI text-embedding-3-small (26,965 documents)
+- **LLM**: OpenAI GPT-5.4 mini with tool calling (configurable via `OPENAI_MODEL`)
+- **Reasoning**: configured for `reasoning_effort=high`, with graceful runtime fallback when unsupported by the active API route
+- **Vector Store**: ChromaDB with OpenAI text-embedding-3-small (36,709 searchable documents)
 - **Database**: DuckDB (12 tables, in-process analytical SQL)
 - **XML Parsing**: lxml (WITSML 1.4.0 DDR + WITSML 1.4.1 real-time)
 - **No heavy frameworks** — pure OpenAI SDK + DuckDB + ChromaDB

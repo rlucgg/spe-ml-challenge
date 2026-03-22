@@ -204,7 +204,7 @@ Output (actual counts):
   - ddr_fluids table: 2,271 rows (well, date, mud_type, mud_class, density_gcc, pv_mPas, yp_Pa)
   - ddr_surveys table: 1,726 rows (well, date, md_m, tvd_m, inclination_deg, azimuth_deg)
   - wellbore_info table: 1,759 rows (well, name_well, name_wellbore, spud_date, drill_complete_date, operator, drill_contractor, rig_name)
-  - Text corpus: 26,965 documents for vector indexing (activity comments + 24hr summaries + forecasts)
+  - Text corpus: 26,965 DDR documents plus WITSML operational messages for a 36,709-document search index
 ```
 
 **Step 2: Parse WITSML Real-Time Data** *(IMPLEMENTED — 33 wellbore sections across 22 wells)*
@@ -232,17 +232,17 @@ Output:
   - perforations table: 48 rows (well, md_top_m, md_base_m, tvd_top_m, tvd_base_m)
 ```
 
-**Step 5: Build Vector Store** *(IMPLEMENTED — 26,965 documents)*
+**Step 5: Build Vector Store** *(IMPLEMENTED — 36,709 documents)*
 ```
-Input:  DDR text corpus (activity comments + summaries + forecasts)
+Input:  DDR text corpus + WITSML operational messages
 Output: ChromaDB collection with OpenAI text-embedding-3-small embeddings
-  - 26,965 documents indexed
+  - 36,709 documents indexed
   - Metadata: well, date, depth_m, doc_type, activity_code
   - Chunk size: per-activity (natural document boundary)
   - Falls back to SQL keyword search when vector store unavailable
 ```
 
-#### B. Agent Tools (`src/tools/`) — 8 implemented
+#### B. Agent Tools (`src/tools/`) — 12 implemented
 
 | Tool Name | Description | Data Sources |
 |---|---|---|
@@ -254,11 +254,16 @@ Output: ChromaDB collection with OpenAI text-embedding-3-small embeddings
 | `compare_wells` | Side-by-side comparison of activity distributions, depths, rates | DuckDB |
 | `get_bha_configurations` | BHA run analysis with drilling parameters (ROP, WOB, RPM from WITSML) | DuckDB |
 | `identify_operational_issues` | Problem detection from DDR state fields, categorized by root cause | DuckDB |
+| `get_formation_context` | Formation and surrounding geology at a given depth | DuckDB |
+| `get_field_benchmarks` | Cleaned field-wide rankings for daily progress, section performance, gas response, risk, production | DuckDB |
+| `generate_depth_time_plot` | Depth-vs-time visualization with section overlays | DuckDB + matplotlib |
+| `get_ddr_narrative` | Guaranteed DDR text retrieval by date/depth for direct quote evidence | DuckDB |
 
 #### C. Orchestrator Agent (`src/agent/`)
 
 **LLM:** OpenAI GPT-5.4 mini (best balance of reasoning + speed + tool calling)
-- Falls back to GPT-5.4 nano for simple lookups
+- Configurable via environment variable
+- Configured for `reasoning_effort=high`, with graceful fallback when unsupported by the active API route
 - System prompt includes drilling domain knowledge primer
 - Tool-calling with structured outputs
 
@@ -286,7 +291,7 @@ Output format for each answer:
 - UNCERTAINTY: What could change the conclusion
 ```
 
-#### D. Drilling Phase Detection Algorithm (`src/analysis/phase_detection.py`)
+#### D. Drilling Phase Detection Algorithm (`src/tools/phase_detection.py`)
 
 Automated phase classification using DDR activity codes:
 
@@ -309,7 +314,7 @@ Algorithm:
 4. Detect transitions by monitoring phase changes + depth discontinuities
 5. Flag ambiguous periods where data and reports conflict
 
-#### E. Efficiency Analysis Module (`src/analysis/efficiency.py`)
+#### E. Efficiency Analysis Module (`src/tools/efficiency_metrics.py`)
 
 **NPT (Non-Productive Time) Classification:**
 - From DDR activity codes: `interruption--*`, `waiting--*`, `repair--*`
@@ -377,9 +382,9 @@ spe-ml-challenge/
 │   │   ├── parse_production.py  # XLSX → production table
 │   │   ├── parse_well_tech.py   # Well picks + perforations → 2 tables
 │   │   ├── build_database.py    # Orchestrate all ingestion → DuckDB (12 tables)
-│   │   └── build_vectorstore.py # Text → ChromaDB embeddings (26,965 docs)
+│   │   └── build_vectorstore.py # Text → ChromaDB embeddings (36,709 docs)
 │   │
-│   ├── tools/                   # Agent tools (8 tools)
+│   ├── tools/                   # Agent tools (12 tools)
 │   │   ├── __init__.py
 │   │   ├── tool_registry.py     # OpenAI function definitions + dispatch
 │   │   ├── query_data.py        # SQL queries on all 12 DuckDB tables
@@ -389,7 +394,11 @@ spe-ml-challenge/
 │   │   ├── efficiency_metrics.py# NPT, ROP, productive time analysis
 │   │   ├── compare_wells.py     # Cross-well comparison
 │   │   ├── bha_analysis.py      # BHA configuration + drilling parameter analysis
-│   │   └── issue_detection.py   # Operational issue identification + root causes
+│   │   ├── issue_detection.py   # Operational issue identification + root causes
+│   │   ├── formation_context.py # Formation lookup / geological depth context
+│   │   ├── field_benchmarks.py  # Cleaned field-wide ranking helpers
+│   │   ├── visualize.py         # Depth-vs-time plot generation
+│   │   └── ddr_narrative.py     # Guaranteed DDR text retrieval
 │   │
 │   ├── agent/                   # LLM agent
 │   │   ├── __init__.py
@@ -403,16 +412,16 @@ spe-ml-challenge/
 ├── data/
 │   └── processed/               # DuckDB + ChromaDB (gitignored, built by ingest)
 │       ├── volve.duckdb          # 12 tables
-│       └── vectorstore/          # 26,965 embedded documents
+│       └── vectorstore/          # 36,709 embedded documents
 │
 ├── presentation/                # 5-minute presentation
 │
-└── tests/                       # 69 tests, all passing
+└── tests/                       # 95 tests, all passing
     ├── __init__.py
     ├── test_config.py           # Well name normalization + display (18 tests)
     ├── test_parse_ddr.py        # DDR parsing: single file + all 1,759 files (12 tests)
     ├── test_parse_witsml.py     # WITSML parsing: all 4 data types + units (13 tests)
-    └── test_tools.py            # All 8 agent tools + registry (26 tests)
+    └── test_tools.py            # All 12 agent tools + registry
 ```
 
 ---
@@ -425,9 +434,9 @@ spe-ml-challenge/
 3. **parse_production.py** — 15,634 production records from Excel
 4. **parse_well_tech.py** — 409 formation tops, 48 perforations from fixed-width ASCII
 5. **build_database.py** — 12 DuckDB tables loaded
-6. **build_vectorstore.py** — 26,965 documents embedded in ChromaDB
+6. **build_vectorstore.py** — 36,709 documents embedded in ChromaDB
 
-### Phase 2: Agent Tools — COMPLETE (8 tools)
+### Phase 2: Agent Tools — COMPLETE (12 tools)
 7. **query_data.py** — SQL query interface over all 12 DuckDB tables
 8. **search_reports.py** — Semantic search (ChromaDB) with SQL keyword fallback
 9. **well_overview.py** — Well metadata, hole sections, formations, activity distribution
@@ -436,20 +445,24 @@ spe-ml-challenge/
 12. **compare_wells.py** — Side-by-side well comparison with activity distributions
 13. **bha_analysis.py** — BHA run analysis with drilling parameters from DDR + WITSML
 14. **issue_detection.py** — Problem detection, categorization, root cause analysis
+15. **formation_context.py** — Formation lookup and geological context at any depth
+16. **field_benchmarks.py** — Field-wide rankings for progress, difficulty, gas response, risk, production
+17. **visualize.py** — Depth-vs-time chart generation
+18. **ddr_narrative.py** — Direct DDR text retrieval by date/depth
 
 ### Phase 3: Agent Core — COMPLETE
-15. **prompts.py** — System prompt with drilling domain knowledge + WITSML data awareness
-16. **tool_registry.py** — 8 OpenAI function definitions with full schema descriptions
-17. **orchestrator.py** — GPT-5.4 mini agent loop with tool calling (max 10 rounds, temperature 0.1)
-18. **output_formatter.py** — Structured answer formatting per problem statement
+19. **prompts.py** — System prompt with drilling domain knowledge + WITSML data awareness
+20. **tool_registry.py** — 12 OpenAI function definitions with full schema descriptions
+21. **orchestrator.py** — GPT-5.4 mini agent loop with tool calling (max 10 rounds, retry + compatibility fallback)
+22. **output_formatter.py** — Structured answer formatting per problem statement
 
 ### Phase 4: CLI & Quality — COMPLETE
-19. **main.py** — CLI: `python -m src.main ingest|ask|demo`
-20. **README.md** — Setup instructions for judges
-21. **Tests** — 69 tests across 4 files (config, DDR, WITSML, tools), all passing
+23. **main.py** — CLI: `python -m src.main ingest|ask|demo`
+24. **README.md** — Setup instructions for judges
+25. **Tests** — 95 tests across 4 files (config, DDR, WITSML, tools), all passing
 
-### Phase 5: Presentation
-22. **slides** — 5-minute walkthrough of approach, architecture, sample Q&A — TODO
+### Phase 5: Presentation — COMPLETE
+26. **slides** — 10-slide walkthrough of approach, architecture, sample Q&A, transparency, and validation
 
 ---
 
@@ -520,7 +533,7 @@ CONFIDENCE: High — phase boundaries clearly marked by casing points and activi
 | LLM hallucination | Tool-calling ensures LLM reasons over REAL data; citations required | Implemented |
 | API rate limits | Tool results truncated at 15K chars; max 10 tool rounds | Implemented |
 | Judge reproducibility | Clear README, .env.example, `python -m src.main ingest && ask` | Tested |
-| Regression bugs | 69 unit tests across parsers, tools, and integration | Passing |
+| Regression bugs | 95 unit tests across parsers, tools, and integration | Passing |
 
 ---
 
@@ -532,7 +545,7 @@ CONFIDENCE: High — phase boundaries clearly marked by casing points and activi
 4. **Actual drilling measurements**: WITSML mudLog provides real ROP, WOB, torque, RPM, lithology per depth interval — not just estimated from daily progress
 5. **Transparent reasoning chain**: The agent shows its work at every step with tool call traces
 6. **Domain-appropriate**: Phase detection uses real drilling engineering concepts (activity codes, hole size transitions, casing points)
-7. **Handles all 6 question categories**: 8 purpose-built tools covering phases, efficiency, ROP, BHA, issues, and cross-well comparison
+7. **Handles all 6 question categories**: 12 purpose-built tools covering phases, efficiency, ROP, BHA, issues, geological context, DDR narrative retrieval, visualization, and cross-well benchmarking
 8. **Quantified uncertainty**: Every answer includes confidence level and stated assumptions
-9. **Reproducible**: Single command setup, judges use their own API keys, 69 passing tests
+9. **Reproducible**: Single command setup, judges use their own API keys, 95 passing tests
 10. **Clean, minimal code**: Pure OpenAI SDK + DuckDB + ChromaDB — no LangChain, no framework bloat

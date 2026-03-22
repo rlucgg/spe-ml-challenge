@@ -144,7 +144,7 @@ All core phases are implemented and tested:
 
 1. **DDR XML parsing** — All 1,759 files parsed → 23,447 activities, 26,965 text docs, zero errors
 2. **WITSML real-time data** — 161 BHA runs, 2,882 mudlog intervals (ROP/WOB/RPM/lithology), 4,217 trajectory stations, 11,134 messages
-3. **Vector store** — 26,965 DDR text documents embedded in ChromaDB (text-embedding-3-small)
+3. **Vector store** — 36,709 searchable documents embedded in ChromaDB (DDR text + WITSML messages via text-embedding-3-small)
 4. **Agent tools** — 12 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection, formation_context, field_benchmarks, visualize, ddr_narrative
 5. **Orchestrator** — GPT-5.4 mini agent with tool calling via OpenAI SDK (max 10 rounds, retry with backoff)
 6. **CLI** — `python -m src.main ingest|ask|demo` with `--trace` and `--save` flags
