@@ -120,11 +120,7 @@ Additionally, the system has been validated against a **130-question stress test
 
 ## Presentation
 
-10-slide presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions. Regenerate with:
-
-```bash
-python presentation/create_slides.py
-```
+Presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions.
 
 ## Technology
 
