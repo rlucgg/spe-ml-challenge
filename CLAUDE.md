@@ -148,7 +148,7 @@ All core phases are implemented and tested:
 4. **Agent tools** — 12 tools: query_data, search_reports, well_overview, phase_detection, efficiency_metrics, compare_wells, bha_analysis, issue_detection, formation_context, field_benchmarks, visualize, ddr_narrative
 5. **Orchestrator** — GPT-5.4 mini agent with tool calling via OpenAI SDK (max 10 rounds, retry with backoff)
 6. **CLI** — `python -m src.main ingest|ask|demo` with `--trace` and `--save` flags
-7. **Tests** — 95 tests across 4 test files, all passing
+7. **Tests** — 95 tests across 4 test files, all passing, plus a 130-question stress test suite
 8. **Presentation** — 10 slides in `presentation/slides.pptx`
 
 ### DuckDB Tables (12 total)

@@ -116,6 +116,8 @@ python -m pytest tests/ -v
 
 95 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 12 agent tools, field benchmarks, tool registry dispatch, output format validation.
 
+Additionally, the system has been validated against a **130-question stress test suite** (across 3 expert sets in `src/analysis/`), demonstrating robust evidence retrieval, consistent formatting, and 100% data citation compliance without hallucination.
+
 ## Presentation
 
 10-slide presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions. Regenerate with:

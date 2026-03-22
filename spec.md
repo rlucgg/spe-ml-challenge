@@ -459,7 +459,7 @@ spe-ml-challenge/
 ### Phase 4: CLI & Quality — COMPLETE
 23. **main.py** — CLI: `python -m src.main ingest|ask|demo`
 24. **README.md** — Setup instructions for judges
-25. **Tests** — 95 tests across 4 files (config, DDR, WITSML, tools), all passing
+25. **Tests** — 95 tests across 4 files (config, DDR, WITSML, tools), all passing, plus a comprehensive 130-question stress test suite.
 
 ### Phase 5: Presentation — COMPLETE
 26. **slides** — 10-slide walkthrough of approach, architecture, sample Q&A, transparency, and validation
