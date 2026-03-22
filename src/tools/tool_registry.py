@@ -12,6 +12,7 @@ from src.tools.compare_wells import compare_wells
 from src.tools.bha_analysis import get_bha_configurations
 from src.tools.issue_detection import identify_operational_issues
 from src.tools.formation_context import get_formation_context
+from src.tools.visualize import generate_depth_time_plot
 
 logger = logging.getLogger(__name__)
 
@@ -267,6 +268,27 @@ TOOL_DEFINITIONS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "generate_depth_time_plot",
+            "description": (
+                "Generate a depth-vs-time plot for a well's drilling campaign. "
+                "Shows depth progression, hole section boundaries as colored regions, "
+                "and problem activities as red dots. Saves a PNG chart file."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "well": {
+                        "type": "string",
+                        "description": "Well name (underscore format)"
+                    },
+                },
+                "required": ["well"],
+            },
+        },
+    },
 ]
 
 # Dispatch map: function name -> callable
@@ -301,6 +323,7 @@ TOOL_FUNCTIONS = {
         well=args["well"],
         depth_m=args.get("depth_m"),
     ),
+    "generate_depth_time_plot": lambda args: generate_depth_time_plot(args["well"]),
 }
 
 

@@ -48,16 +48,22 @@ This parses all data sources into:
 ### 5. Ask Questions
 
 ```bash
+# Standard question
 python -m src.main ask "Identify the major drilling phases for well 15/9-F-11 T2"
+
+# With full evidence trace (shows every tool call, data source, and retrieval time)
+python -m src.main ask "Identify the major drilling phases for well 15/9-F-11 T2" --trace
 ```
 
 ### 6. Run Demo
 
 ```bash
+# Run all 6 demo questions (print to stdout)
 python -m src.main demo
-```
 
-Runs all 6 demonstration questions covering: drilling phases, efficiency, hole section difficulty, BHA effectiveness, operational issues, and cross-well comparison.
+# Run all 6 demo questions and save to demo_results.md with summary table
+python -m src.main demo --save
+```
 
 ## Architecture
 
@@ -65,20 +71,21 @@ Runs all 6 demonstration questions covering: drilling phases, efficiency, hole s
 User Question
      |
      v
-GPT-4o Agent (tool calling, max 10 rounds)
+GPT-4o Agent (tool calling, max 10 rounds, retry with backoff)
      |
-     |-- query_drilling_data     SQL on 12 DuckDB tables
-     |-- search_daily_reports    Semantic search on 26,965 ChromaDB docs
-     |-- get_well_overview       Well metadata, sections, formations
-     |-- get_drilling_phases     Hole-size + activity-code phase detection
-     |-- compute_efficiency      NPT breakdown, ROP by section
-     |-- compare_wells           Side-by-side well comparison
-     |-- get_bha_configurations  WITSML BHA runs + mudlog drilling params
-     |-- identify_issues         Problem detection + root cause analysis
-     |-- get_formation_context   Geological context for any depth
+     |-- query_drilling_data       SQL on 12 DuckDB tables
+     |-- search_daily_reports      Semantic search on 26,965 ChromaDB docs
+     |-- get_well_overview         Well metadata, sections, formations
+     |-- get_drilling_phases       Hole-size + activity-code phase detection
+     |-- compute_efficiency        NPT breakdown, ROP by section
+     |-- compare_wells             Side-by-side well comparison
+     |-- get_bha_configurations    WITSML BHA runs + mudlog drilling params
+     |-- identify_issues           Problem detection + root cause correlation
+     |-- get_formation_context     Geological context for any depth
+     |-- generate_depth_time_plot  Depth-vs-time chart with hole sections
      |
      v
-Structured Answer with Evidence
+Structured Answer with Evidence (+ optional Evidence Trace)
 ```
 
 **Every answer includes:**
@@ -86,6 +93,8 @@ Structured Answer with Evidence
 - Direct quotes from daily drilling reports with well name and date
 - Step-by-step reasoning chain
 - Explicit assumptions and confidence level (HIGH/MEDIUM/LOW)
+
+**Evidence Trace mode** (`--trace`): Shows the complete reasoning chain — every tool call, arguments, retrieval time, and data sources used. Maximum transparency for judges.
 
 ## Data Sources
 
@@ -103,7 +112,7 @@ Structured Answer with Evidence
 python -m pytest tests/ -v
 ```
 
-86 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 9 agent tools, tool registry dispatch, output format validation.
+86 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 10 agent tools, tool registry dispatch, output format validation.
 
 ## Presentation
 
@@ -115,7 +124,7 @@ python presentation/create_slides.py
 
 ## Technology
 
-- **LLM**: OpenAI GPT-4o with function calling (max 10 rounds, temperature 0.1)
+- **LLM**: OpenAI GPT-4o with function calling (max 10 rounds, temperature 0.1, retry with exponential backoff)
 - **Vector Store**: ChromaDB with OpenAI text-embedding-3-small (26,965 documents)
 - **Database**: DuckDB (12 tables, in-process analytical SQL)
 - **XML Parsing**: lxml (WITSML 1.4.0 DDR + WITSML 1.4.1 real-time)

@@ -1,14 +1,17 @@
 """CLI entry point for the SPE GCS 2026 ML Challenge drilling agent.
 
 Usage:
-    python -m src.main ingest          # Ingest all data into DuckDB + ChromaDB
-    python -m src.main ask "question"  # Ask a drilling operations question
-    python -m src.main demo            # Run all 6 demo questions
+    python -m src.main ingest              # Ingest all data into DuckDB + ChromaDB
+    python -m src.main ask "question"      # Ask a drilling operations question
+    python -m src.main ask "question" --trace  # Ask with full evidence trace
+    python -m src.main demo               # Run all 6 demo questions
+    python -m src.main demo --save        # Run demo and save to demo_results.md
 """
 
 import logging
 import sys
 import time
+from datetime import datetime
 
 import typer
 
@@ -38,7 +41,7 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     logger.info("Starting data ingestion pipeline...")
 
     # Step 1: Parse DDR XML files
-    logger.info("Step 1/4: Parsing DDR XML files...")
+    logger.info("Step 1/6: Parsing DDR XML files...")
     from src.ingest.parse_ddr import parse_all_ddrs
     parsed_ddrs = parse_all_ddrs()
     logger.info(
@@ -49,7 +52,7 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
     )
 
     # Step 2: Parse well technical data
-    logger.info("Step 2/4: Parsing well technical data...")
+    logger.info("Step 2/6: Parsing well technical data...")
     from src.ingest.parse_well_tech import parse_well_picks, parse_perforations
     formation_tops = parse_well_picks()
     perforations = parse_perforations()
@@ -109,6 +112,8 @@ def ingest(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
 def ask(
     question: str = typer.Argument(..., help="Drilling operations question"),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
+    trace: bool = typer.Option(False, "--trace", "-t",
+                                help="Show full evidence trace with tool calls"),
 ) -> None:
     """Ask a drilling operations question about the Volve dataset."""
     setup_logging(verbose)
@@ -116,24 +121,36 @@ def ask(
     from src.agent.orchestrator import ask_question
     from src.agent.output_formatter import format_answer
 
-    answer = ask_question(question, verbose=verbose)
+    answer = ask_question(question, verbose=verbose, trace=trace)
     formatted = format_answer(answer, question)
     print(formatted)
 
 
 @app.command()
-def demo(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
+def demo(
+    verbose: bool = typer.Option(False, "--verbose", "-v"),
+    save: bool = typer.Option(False, "--save", "-s",
+                               help="Save results to demo_results.md"),
+) -> None:
     """Run all 6 demo questions to showcase the agent."""
     setup_logging(verbose)
 
     from src.agent.orchestrator import ask_question
-    from src.agent.output_formatter import format_answer
+    from src.agent.output_formatter import format_answer, validate_answer
     from src.agent.prompts import DEMO_QUESTIONS
+
+    header = (
+        "# SPE GCS 2026 ML Challenge — Demo Results\n\n"
+        f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    )
 
     print("\n" + "=" * 70)
     print("SPE GCS 2026 ML Challenge — Demo Run")
-    print("Running 6 demonstration questions...")
+    print(f"Running {len(DEMO_QUESTIONS)} demonstration questions"
+          f"{' (saving to demo_results.md)' if save else ''}...")
     print("=" * 70 + "\n")
+
+    results = []
 
     for i, question in enumerate(DEMO_QUESTIONS):
         print(f"\n{'#' * 70}")
@@ -141,12 +158,62 @@ def demo(verbose: bool = typer.Option(False, "--verbose", "-v")) -> None:
         print(f"{'#' * 70}")
 
         start = time.time()
-        answer = ask_question(question, verbose=verbose)
+        answer = ask_question(question, verbose=verbose, trace=save)
         elapsed = time.time() - start
 
         formatted = format_answer(answer, question)
         print(formatted)
         print(f"\n[Answered in {elapsed:.1f}s]\n")
+
+        validation = validate_answer(answer)
+        results.append({
+            "num": i + 1,
+            "question": question,
+            "answer": answer,
+            "formatted": formatted,
+            "elapsed": elapsed,
+            "confidence": _extract_confidence(answer),
+            "valid": validation["valid"],
+            "warnings": validation["warnings"],
+        })
+
+    if save:
+        _save_demo_results(header, results)
+
+
+def _extract_confidence(answer: str) -> str:
+    """Extract confidence level from answer text."""
+    import re
+    match = re.search(r"\b(HIGH|MEDIUM|LOW)\b", answer, re.IGNORECASE)
+    return match.group(0).upper() if match else "N/A"
+
+
+def _save_demo_results(header: str, results: list[dict]) -> None:
+    """Save demo results to demo_results.md."""
+    lines = [header]
+
+    # Summary table
+    lines.append("## Summary\n")
+    lines.append("| # | Question | Confidence | Time | Format OK |")
+    lines.append("|---|----------|-----------|------|-----------|")
+    for r in results:
+        q_short = r["question"][:60] + "..." if len(r["question"]) > 60 else r["question"]
+        ok = "Yes" if r["valid"] else f"No ({len(r['warnings'])} warnings)"
+        lines.append(f"| {r['num']} | {q_short} | {r['confidence']} | {r['elapsed']:.1f}s | {ok} |")
+    lines.append("\n---\n")
+
+    # Full answers
+    for r in results:
+        lines.append(f"## Question {r['num']}\n")
+        lines.append(f"**Q:** {r['question']}\n")
+        lines.append(r["answer"])
+        lines.append(f"\n*Answered in {r['elapsed']:.1f}s*\n")
+        lines.append("\n---\n")
+
+    with open("demo_results.md", "w") as f:
+        f.write("\n".join(lines))
+
+    print(f"\nDemo results saved to demo_results.md")
 
 
 if __name__ == "__main__":

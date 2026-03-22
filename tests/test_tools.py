@@ -223,7 +223,7 @@ class TestToolRegistry:
 
     def test_tool_count(self):
         from src.tools.tool_registry import TOOL_DEFINITIONS
-        assert len(TOOL_DEFINITIONS) == 9  # 8 original + formation_context
+        assert len(TOOL_DEFINITIONS) == 10  # 8 original + formation_context + visualize
 
     def test_execute_tool(self):
         from src.tools.tool_registry import execute_tool
