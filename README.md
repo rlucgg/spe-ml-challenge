@@ -82,6 +82,8 @@ GPT-5.4 mini Agent (tool calling, max 10 rounds, retry with backoff)
      |-- get_bha_configurations    WITSML BHA runs + mudlog drilling params
      |-- identify_issues           Problem detection + root cause correlation
      |-- get_formation_context     Geological context for any depth
+     |-- get_field_benchmarks      Cross-well rankings and field-wide analysis
+     |-- get_ddr_narrative         Guaranteed DDR text retrieval by date/depth
      |-- generate_depth_time_plot  Depth-vs-time chart with hole sections
      |
      v
@@ -112,11 +114,11 @@ Structured Answer with Evidence (+ optional Evidence Trace)
 python -m pytest tests/ -v
 ```
 
-86 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 10 agent tools, tool registry dispatch, output format validation.
+95 tests covering: well name normalization, DDR parsing, WITSML parsing (unit conversions, deduplication), all 12 agent tools, field benchmarks, tool registry dispatch, output format validation.
 
 ## Presentation
 
-8-slide presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions. Regenerate with:
+10-slide presentation in `presentation/slides.pptx` covering architecture, data integration, tool design, example Q&A, and design decisions. Regenerate with:
 
 ```bash
 python presentation/create_slides.py
